@@ -7,6 +7,7 @@
     "start": "node server.js",
     "backfill:master-signatures": "node scripts/backfill-master-signatures.js",
     "sync:vendor-coordinators": "node scripts/sync_vendor_to_vendor_user.js",
+    "drop:ttr": "node scripts/drop-ttr-collections.js",
     "audit": "npm audit --audit-level=moderate && snyk test",
     "audit:fix": "npm audit fix && snyk fix",
     "audit:report": "npm audit --json > audit-report.json && echo 'Audit report saved to audit-report.json'"

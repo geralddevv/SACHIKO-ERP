@@ -37,13 +37,6 @@ const vendorUserSchema = new mongoose.Schema({
   commodities: [String],
   vendorUserSignature: { type: String, unique: true, sparse: true, trim: true },
 
-  ttr: [
-    {
-      type: Schema.Types.ObjectId,
-      ref: "VendorTtrBinding",
-    },
-  ],
-
   tape: [
     {
       type: Schema.Types.ObjectId,

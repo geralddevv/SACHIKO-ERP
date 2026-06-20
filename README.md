@@ -1,7 +1,7 @@
 # SACHIKO ERP
 
 A web-based ERP system built with Node.js, Express, MongoDB, and EJS. It provides
-modules for managing accounting, HR, inventory, stock, users, and customer care.
+modules for managing accounting, HR, inventory, stock, and users.
 
 ## Tech Stack
 
@@ -17,7 +17,6 @@ modules for managing accounting, HR, inventory, stock, users, and customer care.
 * **HR** – employee and human-resources management
 * **Inventory \& Stock** – product and stock tracking
 * **Users** – authentication and user management
-* **Care** – customer/lead handling
 
 ## License
 

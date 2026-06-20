@@ -2,16 +2,13 @@ import express from "express";
 import Tape from "../../models/inventory/tape.js";
 import PosRoll from "../../models/inventory/posRoll.js";
 import Tafeta from "../../models/inventory/tafeta.js";
-import Ttr from "../../models/inventory/ttr.js";
 import TapeStock from "../../models/inventory/TapeStock.js";
 import PosRollStock from "../../models/inventory/PosRollStock.js";
 import TafetaStock from "../../models/inventory/TafetaStock.js";
-import TtrStock from "../../models/inventory/TtrStock.js";
 import TapeSalesOrder from "../../models/inventory/TapeSalesOrder.js";
 import VendorTapeBinding from "../../models/inventory/vendorTapeBinding.js";
 import VendorPosRollBinding from "../../models/inventory/vendorPosRollBinding.js";
 import VendorTafetaBinding from "../../models/inventory/vendorTafetaBinding.js";
-import VendorTtrBinding from "../../models/inventory/vendorTtrBinding.js";
 import VendorUser from "../../models/users/vendorUser.js";
 import Vendor from "../../models/users/vendor.js";
 import PurchaseOrder from "../../models/inventory/PurchaseOrder.js";
@@ -27,7 +24,6 @@ async function getReorderData() {
     { model: Tape, stockModel: TapeStock, stockRef: "tape", minQtyField: "tapeMinQty", typeKey: "Tape", label: "Tape", bindingModel: VendorTapeBinding, refField: "tapeId" },
     { model: PosRoll, stockModel: PosRollStock, stockRef: "posRoll", minQtyField: "posMinQty", typeKey: "PosRoll", label: "POS Roll", bindingModel: VendorPosRollBinding, refField: "posRollId" },
     { model: Tafeta, stockModel: TafetaStock, stockRef: "tafeta", minQtyField: "tafetaMinQty", typeKey: "Tafeta", label: "Tafeta", bindingModel: VendorTafetaBinding, refField: "tafetaId" },
-    { model: Ttr, stockModel: TtrStock, stockRef: "ttr", minQtyField: "ttrMinQty", typeKey: "Ttr", label: "TTR", bindingModel: VendorTtrBinding, refField: "ttrId" },
   ];
 
   const results = [];
@@ -98,7 +94,7 @@ async function getReorderData() {
           _id: item._id,
           type: t.label,
           typeKey: t.typeKey,
-          productId: item.tapeProductId || item.posProductId || item.tafetaProductId || item.ttrProductId || "N/A",
+          productId: item.tapeProductId || item.posProductId || item.tafetaProductId || "N/A",
           name: getItemName(item, t.typeKey),
           stock,
           booked,
@@ -109,7 +105,7 @@ async function getReorderData() {
           coordinators: Array.from(coordinatorMap[itemIdStr] || []).join(", "),
           locations: Array.from(locationMap[itemIdStr] || []).join(", "),
           hasVendors: (vendorMap[itemIdStr] || new Set()).size > 0,
-          bindingPath: ({ Tape: "/fairdesk/form/vendor-item-binding/tape", PosRoll: "/fairdesk/form/vendor-item-binding/pos", Tafeta: "/fairdesk/form/vendor-item-binding/tafeta", Ttr: "/fairdesk/form/ttr-vendor-binding" })[t.typeKey] || "/fairdesk/vendor/coordinator/view"
+          bindingPath: ({ Tape: "/sachiko/form/vendor-item-binding/tape", PosRoll: "/sachiko/form/vendor-item-binding/pos", Tafeta: "/sachiko/form/vendor-item-binding/tafeta" })[t.typeKey] || "/sachiko/vendor/coordinator/view"
         });
       }
     });
@@ -122,7 +118,6 @@ function getItemName(item, type) {
   if (type === "Tape") return `${item.tapePaperCode || ""} ${item.tapeGsm || ""}gsm`.trim() || item.tapeProductId;
   if (type === "PosRoll") return `${item.posPaperCode || ""} ${item.posGsm || ""}gsm`.trim() || item.posProductId;
   if (type === "Tafeta") return `${item.tafetaMaterialCode || ""} ${item.tafetaGsm || ""}gsm`.trim() || item.tafetaProductId;
-  if (type === "Ttr") return `${item.ttrType || ""} ${item.ttrWidth || ""}x${item.ttrMtrs || ""}`.trim() || item.ttrProductId;
   return "N/A";
 }
 
@@ -131,13 +126,12 @@ async function getItemShortage(type, id) {
     const types = {
       "Tape": { stockModel: TapeStock, stockRef: "tape", minQtyField: "tapeMinQty" },
       "PosRoll": { stockModel: PosRollStock, stockRef: "posRoll", minQtyField: "posMinQty" },
-      "Tafeta": { stockModel: TafetaStock, stockRef: "tafeta", minQtyField: "tafetaMinQty" },
-      "Ttr": { stockModel: TtrStock, stockRef: "ttr", minQtyField: "ttrMinQty" }
+      "Tafeta": { stockModel: TafetaStock, stockRef: "tafeta", minQtyField: "tafetaMinQty" }
     };
     const t = types[type];
     if (!t) return 0;
 
-    const item = await (type === "Tape" ? Tape : type === "PosRoll" ? PosRoll : type === "Tafeta" ? Tafeta : Ttr).findById(id).lean();
+    const item = await (type === "Tape" ? Tape : type === "PosRoll" ? PosRoll : Tafeta).findById(id).lean();
     if (!item) return 0;
 
     // Current Stock
@@ -196,9 +190,6 @@ router.get("/reorder/api/vendors/:type/:id", async (req, res) => {
     } else if (type === "Tafeta") {
         bindingModel = VendorTafetaBinding;
         refField = "tafetaId";
-    } else if (type === "Ttr") {
-        bindingModel = VendorTtrBinding;
-        refField = "ttrId";
     }
 
     if (!bindingModel) return res.status(400).json([]);
@@ -232,10 +223,6 @@ router.get("/reorder/select-vendor/:type/:id", async (req, res) => {
       model = Tafeta;
       bindingModel = VendorTafetaBinding;
       refField = "tafetaId";
-    } else if (normalizedType === "ttr") {
-      model = Ttr;
-      bindingModel = VendorTtrBinding;
-      refField = "ttrId";
     }
 
     if (!model) return res.status(404).send("Item Type Not Found");
@@ -283,7 +270,6 @@ router.post("/reorder/create-po", requireAuth, createLimiter, async (req, res) =
     // Standardize itemType for Model Enums
     if (itemType === "pos-roll") itemType = "PosRoll";
     if (itemType === "tafeta") itemType = "Tafeta";
-    if (itemType === "ttr") itemType = "Ttr";
     if (itemType === "tape") itemType = "Tape";
 
     let bindingModel, refField, onBindingModel;
@@ -299,15 +285,11 @@ router.post("/reorder/create-po", requireAuth, createLimiter, async (req, res) =
       bindingModel = VendorTafetaBinding;
       refField = "tafetaId";
       onBindingModel = "VendorTafetaBinding";
-    } else if (itemType === "Ttr") {
-      bindingModel = VendorTtrBinding;
-      refField = "ttrId";
-      onBindingModel = "VendorTtrBinding";
     }
 
     if (!bindingModel) {
         req.flash("notification", "Invalid item type specified.");
-        return res.redirect("/fairdesk/purchase/pending");
+        return res.redirect("/sachiko/purchase/pending");
     }
 
     let binding = null;
@@ -330,7 +312,7 @@ router.post("/reorder/create-po", requireAuth, createLimiter, async (req, res) =
     }
     if (!binding) {
       req.flash("notification", "Vendor not binded for this item. Purchase Order was not created.");
-      return res.redirect("/fairdesk/purchase/pending");
+      return res.redirect("/sachiko/purchase/pending");
     }
 
     const resolvedVendorUserId = vendorUserId || binding.vendorUserId;
@@ -376,7 +358,7 @@ router.post("/reorder/create-po", requireAuth, createLimiter, async (req, res) =
       req.flash("notification", "Purchase Order created successfully.");
     }
 
-    res.redirect("/fairdesk/purchase/pending");
+    res.redirect("/sachiko/purchase/pending");
   } catch (err) {
     console.error("CREATE PO ERROR:", err);
     req.flash("notification", "Error: " + (err.message || "Failed to create Purchase Order."));
@@ -409,7 +391,7 @@ router.post("/purchase/status", requireAuth, updateLimiter, async (req, res) => 
     });
 
     req.flash("notification", `Purchase Order mark as ${status.toLowerCase()} successfully.`);
-    res.redirect("/fairdesk/purchase/pending");
+    res.redirect("/sachiko/purchase/pending");
   } catch (err) {
     console.error("PO STATUS UPDATE ERROR:", err);
     req.flash("notification", "Error updating Purchase Order status.");
@@ -420,7 +402,7 @@ router.post("/purchase/status", requireAuth, updateLimiter, async (req, res) => 
 router.get("/reorder/select-vendor-multi", async (req, res) => {
   try {
     const itemsParam = req.query.items;
-    if (!itemsParam) return res.redirect("/fairdesk/inventory/reorder");
+    if (!itemsParam) return res.redirect("/sachiko/inventory/reorder");
 
     const tokens = decodeURIComponent(itemsParam).split(",").map(s => s.trim()).filter(Boolean);
     const cartItems = [];
@@ -428,7 +410,7 @@ router.get("/reorder/select-vendor-multi", async (req, res) => {
     for (const token of tokens) {
       const parts = token.split(":");
       if (parts.length < 2) continue;
-      const typeKey  = parts[0];  // Tape | PosRoll | Tafeta | Ttr
+      const typeKey  = parts[0];  // Tape | PosRoll | Tafeta
       const id       = parts[1];
       const shortage = parseInt(parts[2]) || 0;
 
@@ -436,7 +418,6 @@ router.get("/reorder/select-vendor-multi", async (req, res) => {
       if (typeKey === "Tape")    { model = Tape;    bindingModel = VendorTapeBinding;    refField = "tapeId"; }
       else if (typeKey === "PosRoll") { model = PosRoll; bindingModel = VendorPosRollBinding; refField = "posRollId"; }
       else if (typeKey === "Tafeta")  { model = Tafeta;  bindingModel = VendorTafetaBinding;  refField = "tafetaId"; }
-      else if (typeKey === "Ttr")     { model = Ttr;     bindingModel = VendorTtrBinding;     refField = "ttrId"; }
       else continue;
 
       const [item, bindings] = await Promise.all([
@@ -461,7 +442,7 @@ router.get("/reorder/select-vendor-multi", async (req, res) => {
           userContact:     v.userContact,
           userLocation:    v.userLocation,
           locationDetails: v.locationDetails || [],
-          minQty:          binding ? (binding.tapeMinQty || binding.posMinQty || binding.tafetaMinQty || binding.ttrMinQty || 0) : 0,
+          minQty:          binding ? (binding.tapeMinQty || binding.posMinQty || binding.tafetaMinQty || 0) : 0,
           hasBinding:      !!binding
         });
       });
@@ -476,7 +457,7 @@ router.get("/reorder/select-vendor-multi", async (req, res) => {
       });
     }
 
-    if (cartItems.length === 0) return res.redirect("/fairdesk/inventory/reorder");
+    if (cartItems.length === 0) return res.redirect("/sachiko/inventory/reorder");
 
     res.render("inventory/selectVendorMulti.ejs", {
       title: "Create Purchase Orders",
@@ -512,7 +493,6 @@ router.post("/reorder/create-po-multi", requireAuth, createLimiter, async (req, 
       if (itemType === "Tape")    { bindingModel = VendorTapeBinding;    refField = "tapeId";    onBindingModel = "VendorTapeBinding"; }
       else if (itemType === "PosRoll") { bindingModel = VendorPosRollBinding; refField = "posRollId"; onBindingModel = "VendorPosRollBinding"; }
       else if (itemType === "Tafeta")  { bindingModel = VendorTafetaBinding;  refField = "tafetaId"; onBindingModel = "VendorTafetaBinding"; }
-      else if (itemType === "Ttr")     { bindingModel = VendorTtrBinding;     refField = "ttrId";     onBindingModel = "VendorTtrBinding"; }
       else continue;
 
       let binding = null;
@@ -559,7 +539,7 @@ router.post("/reorder/create-po-multi", requireAuth, createLimiter, async (req, 
       req.flash("notification", "No Purchase Orders were created. Check vendor bindings for the selected items.");
     }
 
-    res.redirect("/fairdesk/purchase/pending");
+    res.redirect("/sachiko/purchase/pending");
   } catch (err) {
     console.error("CREATE MULTI PO ERROR:", err);
     req.flash("notification", "Error: " + (err.message || "Failed to create Purchase Orders."));
@@ -610,7 +590,6 @@ router.get("/purchase/order", async (req, res) => {
         if      (typeKey === "Tape")    { bindingModel = VendorTapeBinding;    refField = "tapeId"; }
         else if (typeKey === "PosRoll") { bindingModel = VendorPosRollBinding; refField = "posRollId"; }
         else if (typeKey === "Tafeta")  { bindingModel = VendorTafetaBinding;  refField = "tafetaId"; }
-        else if (typeKey === "Ttr")     { bindingModel = VendorTtrBinding;     refField = "ttrId"; }
 
         if (bindingModel) {
           const binding = await bindingModel.findOne({ [refField]: id }).populate("vendorUserId").lean();
@@ -657,7 +636,7 @@ router.get("/purchase/coordinators/:vendorId", async (req, res) => {
 /**
  * GET /purchase/items/:type/:vendorUserId
  * Returns items bound to the given coordinator, enriched with stock & shortage info.
- * type: Tape | PosRoll | Tafeta | Ttr
+ * type: Tape | PosRoll | Tafeta
  */
 router.get("/purchase/items/:type/:vendorUserId", async (req, res) => {
   try {
@@ -667,7 +646,6 @@ router.get("/purchase/items/:type/:vendorUserId", async (req, res) => {
     if      (type === "Tape")    { bindingModel = VendorTapeBinding;    stockModel = TapeStock;    stockRef = "tape";    itemRef = "tapeId";    minQtyField = "tapeMinQty"; }
     else if (type === "PosRoll") { bindingModel = VendorPosRollBinding; stockModel = PosRollStock; stockRef = "posRoll"; itemRef = "posRollId"; minQtyField = "posMinQty"; }
     else if (type === "Tafeta")  { bindingModel = VendorTafetaBinding;  stockModel = TafetaStock;  stockRef = "tafeta"; itemRef = "tafetaId"; minQtyField = "tafetaMinQty"; }
-    else if (type === "Ttr")     { bindingModel = VendorTtrBinding;     stockModel = TtrStock;     stockRef = "ttr";    itemRef = "ttrId";    minQtyField = "ttrMinQty"; }
     else return res.status(400).json([]);
 
     const bindings = await bindingModel
@@ -735,11 +713,6 @@ router.get("/purchase/items/:type/:vendorUserId", async (req, res) => {
         details = { type: "Tafeta", productId: item.tafetaProductId, materialCode: item.tafetaMaterialCode,
           gsm: item.tafetaGsm, width: item.tafetaWidth, mtrs: item.tafetaMtrs,
           vendorPaperCode: b.vendorTafetaMaterialCode, minQty };
-      } else if (type === "Ttr") {
-        displayName = `${item.ttrType || ""} ${item.ttrWidth || ""}mm × ${item.ttrMtrs || ""}m`;
-        rate    = b.ttrRatePerRoll;
-        details = { type: "Ttr", productId: item.ttrProductId, ttrType: item.ttrType,
-          width: item.ttrWidth, mtrs: item.ttrMtrs, color: item.ttrColor, inkFace: item.ttrInkFace, minQty };
       }
 
       return {
@@ -805,18 +778,17 @@ router.post("/purchase/order", requireAuth, createLimiter, async (req, res) => {
     if      (itemType === "Tape")    { bindingModel = VendorTapeBinding;    onBindingModel = "VendorTapeBinding"; }
     else if (itemType === "PosRoll") { bindingModel = VendorPosRollBinding; onBindingModel = "VendorPosRollBinding"; }
     else if (itemType === "Tafeta")  { bindingModel = VendorTafetaBinding;  onBindingModel = "VendorTafetaBinding"; }
-    else if (itemType === "Ttr")     { bindingModel = VendorTtrBinding;     onBindingModel = "VendorTtrBinding"; }
     else { return res.status(400).json({ success: false, message: "Invalid item type." }); }
 
     let binding = null;
     if (vendorBindingId) binding = await bindingModel.findById(vendorBindingId);
     if (!binding && vendorUserId && itemId) {
-      const refField = itemType === "Tape" ? "tapeId" : itemType === "PosRoll" ? "posRollId" : itemType === "Tafeta" ? "tafetaId" : "ttrId";
+      const refField = itemType === "Tape" ? "tapeId" : itemType === "PosRoll" ? "posRollId" : "tafetaId";
       binding = await bindingModel.findOne({ [refField]: itemId, vendorUserId });
     }
     if (!binding) {
       req.flash("notification", "Vendor binding not found for selected item.");
-      return res.redirect("/fairdesk/inventory/purchase/order");
+      return res.redirect("/sachiko/inventory/purchase/order");
     }
 
     const parsedDate = new Date(estimatedDate);
@@ -853,7 +825,7 @@ router.post("/purchase/order", requireAuth, createLimiter, async (req, res) => {
       req.flash("notification", "Purchase Order created successfully.");
     }
 
-    res.redirect("/fairdesk/purchase/pending");
+    res.redirect("/sachiko/purchase/pending");
   } catch (err) {
     console.error("CREATE PURCHASE ORDER ERROR:", err);
     req.flash("notification", "Error: " + (err.message || "Failed to create Purchase Order."));
@@ -886,7 +858,6 @@ router.post("/purchase/order-multi", requireAuth, createLimiter, async (req, res
       if      (itemType === "Tape")    { bindingModel = VendorTapeBinding;    refField = "tapeId";    onBindingModel = "VendorTapeBinding"; }
       else if (itemType === "PosRoll") { bindingModel = VendorPosRollBinding; refField = "posRollId"; onBindingModel = "VendorPosRollBinding"; }
       else if (itemType === "Tafeta")  { bindingModel = VendorTafetaBinding;  refField = "tafetaId";  onBindingModel = "VendorTafetaBinding"; }
-      else if (itemType === "Ttr")     { bindingModel = VendorTtrBinding;     refField = "ttrId";     onBindingModel = "VendorTtrBinding"; }
       else continue;
 
       let binding = null;
@@ -933,7 +904,7 @@ router.post("/purchase/order-multi", requireAuth, createLimiter, async (req, res
       req.flash("notification", "No Purchase Orders were created. Check vendor bindings for the selected items.");
     }
 
-    res.redirect("/fairdesk/purchase/pending");
+    res.redirect("/sachiko/purchase/pending");
   } catch (err) {
     console.error("CREATE PURCHASE ORDER MULTI ERROR:", err);
     req.flash("notification", "Error: " + (err.message || "Failed to create Purchase Orders."));

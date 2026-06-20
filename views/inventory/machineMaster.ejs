@@ -1,39 +1,39 @@
 <% layout('/layout/boilerplate') %>
 <div class="main-content" style="padding: 10px; display: flex; flex-direction: column; gap: 10px;">
-  <form action="/sachiko/form/location" method="post" class="needs-validation" autocomplete="off" novalidate>
+  <form action="/sachiko/form/machine" method="post" class="needs-validation" autocomplete="off" novalidate>
     <div class="span-full form-heading">
-      <h1>Location Master</h1>
+      <h1>Machine Master</h1>
     </div>
 
     <div class="span-full form-subheading">
-      <h1>Add New Location</h1>
+      <h1>Add New Machine</h1>
     </div>
 
     <div class="span-eight">
-      <label for="location-name">Location Name</label>
+      <label for="machine-name">Machine Name</label>
       <input
         type="text"
-        id="location-name"
+        id="machine-name"
         class="form-control"
-        name="locationName"
-        placeholder="Enter Location Name"
+        name="machineName"
+        placeholder="Enter Machine Name"
         required
       />
     </div>
 
     <div class="btn-grp span-full" style="grid-column: span 24;">
-      <button type="submit">Save Location</button>
+      <button type="submit">Save Machine</button>
     </div>
 
-    <!-- EXISTING LOCATIONS -->
+    <!-- EXISTING MACHINES -->
     <div class="span-full form-subheading">
-      <h1>Existing Locations</h1>
+      <h1>Existing Machines</h1>
     </div>
 
     <div class="span-full" style="padding: 0.5rem;">
-      <% if (locations && locations.length > 0) { %>
+      <% if (machines && machines.length > 0) { %>
         <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-          <% locations.forEach(loc => { %>
+          <% machines.forEach(machine => { %>
             <span style="
               display: inline-flex;
               align-items: center;
@@ -46,12 +46,12 @@
               font-size: 14px;
               border: 1px solid #bae6fd;
             ">
-              <%= loc.locationName %>
+              <%= machine.machineName %>
             </span>
           <% }) %>
         </div>
       <% } else { %>
-        <p style="color: #6b7280; font-size: 14px; margin: 0px;">No locations added yet.</p>
+        <p style="color: #6b7280; font-size: 14px; margin: 0px;">No machines added yet.</p>
       <% } %>
     </div>
   </form>
@@ -63,7 +63,7 @@
     <div style="padding:25px 20px; text-align:center;">
       <i class="fa-solid fa-triangle-exclamation" style="font-size:28px; color:#ef4444; margin-bottom:12px;"></i>
       <p style="margin:0; color:#333; font-size:16px; line-height:1.5;">
-        Are you sure you want to delete <strong id="delete-loc-name"></strong>?
+        Are you sure you want to delete <strong id="delete-machine-name"></strong>?
       </p>
     </div>
     <div style="padding:15px 20px; background:#f9fafb; display:flex; justify-content:flex-end; gap:10px; border-top:1px solid #e5e7eb;">
@@ -85,7 +85,7 @@
 
   function confirmDelete(id, name) {
     deleteId = id;
-    document.getElementById("delete-loc-name").textContent = name;
+    document.getElementById("delete-machine-name").textContent = name;
     document.getElementById("delete-dialog").style.display = "flex";
   }
 
@@ -97,15 +97,15 @@
   async function submitDelete() {
     if (!deleteId) return;
     try {
-      const res = await fetch(`/sachiko/api/locations/${deleteId}`, { method: "DELETE" });
+      const res = await fetch(`/sachiko/api/machines/${deleteId}`, { method: "DELETE" });
       const data = await res.json();
       if (data.success) {
         window.location.reload();
       } else {
-        alert(data.message || "Failed to delete location");
+        alert(data.message || "Failed to delete machine");
       }
     } catch (err) {
-      alert("Error deleting location");
+      alert("Error deleting machine");
     }
     closeDeleteDialog();
   }

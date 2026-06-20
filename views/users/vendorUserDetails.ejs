@@ -266,13 +266,13 @@
         </div>
       </div>
       <div class="header-actions">
-        <button class="action-btn-header" onclick="window.location.href='/fairdesk/form/vendor'">
+        <button class="action-btn-header" onclick="window.location.href='/sachiko/form/vendor'">
           <i class="fa-solid fa-building"></i> Add Vendor
         </button>
-        <button class="action-btn-header" onclick="window.location.href='/fairdesk/form/vendor?tab=user&vendorName=<%= encodeURIComponent(vendorUser.vendorName) %>'">
+        <button class="action-btn-header" onclick="window.location.href='/sachiko/form/vendor?tab=user&vendorName=<%= encodeURIComponent(vendorUser.vendorName) %>'">
           <i class="fa-solid fa-user-plus"></i> Add Coordinator
         </button>
-        <a href="/fairdesk/form/edit/vendor-user/<%= vendorUser._id %>" class="action-btn-header">
+        <a href="/sachiko/form/edit/vendor-user/<%= vendorUser._id %>" class="action-btn-header">
           <i class="fa-solid fa-pen"></i> Edit Coordinator
         </a>
         <button class="action-btn-header danger" onclick="confirmDeleteCoordinator()">
@@ -349,7 +349,7 @@
     <div class="section-header">
       <h2>Item Specifications</h2>
       <div style="display: flex; gap: 8px;">
-        <span class="badge" style="background: #f1f5f9; color: #64748b; font-size: 11px;">Total Items: <%= (labels.length + ttrs.length + tapes.length + posRolls.length + tafetas.length) %></span>
+        <span class="badge" style="background: #f1f5f9; color: #64748b; font-size: 11px;">Total Items: <%= (labels.length + tapes.length + posRolls.length + tafetas.length) %></span>
       </div>
     </div>
 
@@ -400,51 +400,6 @@
         </div>
       <% } %>
 
-      <!-- TTR -->
-      <% if (ttrs && ttrs.length > 0) { %>
-        <div class="item-category-group">
-          <div class="item-category-header">
-            <span class="item-type-label">TTR</span>
-            <span class="item-count-badge"><%= ttrs.length %></span>
-          </div>
-          <table class="inner-spec-table">
-            <thead>
-              <tr>
-                <th style="width: 12%;">Item</th>
-                <th style="width: 12%;">Type</th>
-                <th>Color</th>
-                <th>Width</th>
-                <th>Mtrs</th>
-                <th>InkFace</th>
-                <th>Core</th>
-                <th>Min</th>
-                <th>Odr</th>
-                <th>Freq</th>
-                <th>Credit</th>
-                <th>Rate</th>
-              </tr>
-            </thead>
-            <tbody>
-              <% ttrs.forEach(i => { %>
-                <tr>
-                  <td class="item-name-cell"><%= i.vendorTtrMaterialCode %></td>
-                  <td><%= i.vendorTtrType || (i.ttrId ? i.ttrId.ttrType : '-') %></td>
-                  <td><%= i.vendorTtrColor || (i.ttrId ? i.ttrId.ttrColor : '-') %></td>
-                  <td><%= i.ttrId ? i.ttrId.ttrWidth : '-' %></td>
-                  <td><%= i.ttrMtrsDel %></td>
-                  <td><%= i.ttrId ? i.ttrId.ttrInkFace : '-' %></td>
-                  <td><%= i.ttrId ? i.ttrId.ttrCoreId : '-' %></td>
-                  <td><%= i.ttrMinQty %></td>
-                  <td><%= i.ttrOdrQty || '-' %></td>
-                  <td><%= i.ttrOdrFreq || '-' %></td>
-                  <td><%= i.ttrCreditTerm || '-' %></td>
-                  <td style="font-weight:600;">₹<%= i.ttrRatePerRoll %></td>
-                </tr>
-              <% }) %>
-            </tbody>
-          </table>
-        </div>
-      <% } %>
 
       <!-- Tape -->
       <% if (tapes && tapes.length > 0) { %>
@@ -586,7 +541,6 @@
 
       <% if (
         (labels || []).length === 0 &&
-        (ttrs || []).length === 0 &&
         (tapes || []).length === 0 &&
         (posRolls || []).length === 0 &&
         (tafetas || []).length === 0
@@ -601,7 +555,7 @@
 </div>
 
 <!-- Delete Modal -->
-<form id="deleteCoordinatorForm" method="POST" action="/fairdesk/vendor/coordinator/details/<%= vendorUser._id %>/delete" style="display:none;">
+<form id="deleteCoordinatorForm" method="POST" action="/sachiko/vendor/coordinator/details/<%= vendorUser._id %>/delete" style="display:none;">
   <input type="hidden" name="_csrf" value="<%= csrfToken %>">
 </form>
 

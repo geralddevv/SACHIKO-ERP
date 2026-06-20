@@ -609,22 +609,6 @@ select {
 
 /* Navigaiton panel */
 
-.nav-care-opt {
-  width: 100%;
-  /* background-color: tomato; */
-  height: 0;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  overflow: hidden;
-  transition: height 0.3s ease-in-out;
-  margin: 0;
-  border-radius: 0.5rem;
-  display: block;
-  position: static;
-  /* background-color: tomato; */
-}
-
 .nav-labels-opt {
   width: 100%;
   /* padding: 0 0.2rem; */

@@ -59,7 +59,6 @@
           <option value="TAPE">Tape</option>
           <option value="TAFETA">Tafeta</option>
           <option value="POS_ROLL">POS Roll</option>
-          <option value="TTR">TTR</option>
           <option value="LABEL">Label</option>
         </select>
         <i
@@ -78,7 +77,7 @@
       </div>
 
       <a
-        href="/fairdesk/sales/order/logs"
+        href="/sachiko/sales/order/logs"
         style="
           padding: 6px 14px;
           background: #044a78;
@@ -242,7 +241,6 @@
     let itemType = "TAPE";
     if (row.onModel === "PosRoll") itemType = "POS_ROLL";
     if (row.onModel === "Tafeta") itemType = "TAFETA";
-    if (row.onModel === "Ttr") itemType = "TTR";
     if (row.onModel === "Label") itemType = "LABEL";
     return itemType;
   }
@@ -261,12 +259,6 @@
     if (row.onModel === "Tafeta") {
       if (tape.tafetaMaterialCode) return `${tape.tafetaMaterialCode} ${tape.tafetaGsm ?? ""}gsm`.trim();
       if (tape.tafetaProductId) return String(tape.tafetaProductId);
-    }
-    if (row.onModel === "Ttr") {
-      if (tape.ttrType || tape.ttrWidth || tape.ttrMtrs) {
-        return `${tape.ttrType || ""} ${tape.ttrWidth || ""}mm x ${tape.ttrMtrs || ""}m`.replace(/\s+/g, " ").trim();
-      }
-      if (tape.ttrProductId) return String(tape.ttrProductId);
     }
     if (row.onModel === "Label") {
       if (tape.labelWidth || tape.labelHeight) return `${tape.labelWidth || ""}x${tape.labelHeight || ""}`;
@@ -367,7 +359,7 @@
       () => {
         const form = document.createElement("form");
         form.method = "POST";
-        form.action = "/fairdesk/sales/order/status";
+        form.action = "/sachiko/sales/order/status";
 
         const idInput = document.createElement("input");
         idInput.type = "hidden";
@@ -434,11 +426,10 @@
           let itemType = "TAPE";
           if (row.onModel === "PosRoll") itemType = "POS_ROLL";
           if (row.onModel === "Tafeta") itemType = "TAFETA";
-          if (row.onModel === "Ttr") itemType = "TTR";
           if (row.onModel === "Label") itemType = "LABEL";
 
-          const confirmUrl = `/fairdesk/sales/order/confirm?orderId=${row._id}&type=${itemType}&client=${encodeURIComponent(client)}&user=${user}&item=${item}`;
-          const editUrl = `/fairdesk/sales/order?orderId=${row._id}&type=${itemType}&client=${encodeURIComponent(client)}&user=${user}&item=${item}`;
+          const confirmUrl = `/sachiko/sales/order/confirm?orderId=${row._id}&type=${itemType}&client=${encodeURIComponent(client)}&user=${user}&item=${item}`;
+          const editUrl = `/sachiko/sales/order?orderId=${row._id}&type=${itemType}&client=${encodeURIComponent(client)}&user=${user}&item=${item}`;
           return `
                 <div style="display:flex; gap:6px; justify-content:center; flex-wrap:nowrap; align-items:center; white-space:nowrap;">
                     <button
@@ -501,7 +492,6 @@
           const val = cell.getValue();
           if (val === "PosRoll") return "POS Roll";
           if (val === "Tafeta") return "Tafeta";
-          if (val === "Ttr") return "TTR";
           if (val === "Label") return "Label";
           return "Tape";
         },
@@ -589,10 +579,9 @@
           let typeSlug = "tape";
           if (model === "PosRoll") typeSlug = "pos-roll";
           else if (model === "Tafeta") typeSlug = "tafeta";
-          else if (model === "Ttr") typeSlug = "ttr";
           else if (model === "Label") typeSlug = "label";
 
-          const url = `/fairdesk/${typeSlug}/profile/${itemId}`;
+          const url = `/sachiko/${typeSlug}/profile/${itemId}`;
           
           let color = Number(val) < balance ? "#dc2626" : "#059669";
           if (row.hasPendingPo) color = "#d97706"; // Yellowish orange for pending PO
@@ -703,7 +692,6 @@
         let type = "TAPE";
         if (data.onModel === "PosRoll") type = "POS_ROLL";
         if (data.onModel === "Tafeta") type = "TAFETA";
-        if (data.onModel === "Ttr") type = "TTR";
         if (data.onModel === "Label") type = "LABEL";
         return type === val;
       });

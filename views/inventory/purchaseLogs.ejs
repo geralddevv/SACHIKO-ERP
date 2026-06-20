@@ -9,7 +9,7 @@
     <h1>Purchase Action Logs</h1>
     <div class="download-btns" style="display: flex; gap: 10px; align-items: center">
       <a
-        href="/fairdesk/purchase/pending"
+        href="/sachiko/purchase/pending"
         style="
           padding: 6px 14px;
           background: #044a78;
@@ -70,9 +70,6 @@
     }
     if (order.onModel === "Tafeta") {
       return `${item.tafetaMaterialCode || ""} ${item.tafetaGsm || ""}gsm`.trim() || item.tafetaProductId;
-    }
-    if (order.onModel === "Ttr") {
-      return `${item.ttrType || ""} ${item.ttrWidth || ""}x${item.ttrMtrs || ""}`.trim() || item.ttrProductId;
     }
     return "Unknown Item";
   }

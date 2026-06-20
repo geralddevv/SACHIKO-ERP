@@ -9,7 +9,7 @@
     <h1>Order Action Logs</h1>
     <div class="download-btns" style="display: flex; gap: 10px; align-items: center">
       <a
-        href="/fairdesk/sales/pending"
+        href="/sachiko/sales/pending"
         style="
           padding: 6px 14px;
           background: #044a78;
@@ -76,7 +76,6 @@
     let itemTypeLabel = "Tape";
     if (order.onModel === "PosRoll") itemTypeLabel = "POS Roll";
     else if (order.onModel === "Tafeta") itemTypeLabel = "Tafeta";
-    else if (order.onModel === "Ttr") itemTypeLabel = "TTR";
     else if (order.onModel === "Label") itemTypeLabel = "Label";
 
     let itemName = "";
@@ -89,12 +88,6 @@
     } else if (order.onModel === "Tafeta") {
       if (item.tafetaMaterialCode) itemName = `${item.tafetaMaterialCode} ${item.tafetaGsm ?? ""}gsm`.trim();
       else if (item.tafetaProductId) itemName = String(item.tafetaProductId);
-    } else if (order.onModel === "Ttr") {
-      if (item.ttrType || item.ttrWidth || item.ttrMtrs) {
-        itemName = `${item.ttrType || ""} ${item.ttrWidth || ""}mm x ${item.ttrMtrs || ""}m`.replace(/\s+/g, " ").trim();
-      } else if (item.ttrProductId) {
-        itemName = String(item.ttrProductId);
-      }
     } else if (order.onModel === "Label") {
       if (item.labelWidth || item.labelHeight) itemName = `${item.labelWidth || ""}x${item.labelHeight || ""}`;
     }

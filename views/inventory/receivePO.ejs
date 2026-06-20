@@ -1,7 +1,7 @@
 <% layout('/layout/boilerplate') -%>
 
 <div class="main-content">
-  <form id="receive-po-form" action="/fairdesk/purchase/receive" method="post" class="needs-validation" autocomplete="off" novalidate>
+  <form id="receive-po-form" action="/sachiko/purchase/receive" method="post" class="needs-validation" autocomplete="off" novalidate>
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <input type="hidden" name="orderId" value="<%= order._id %>" />
     <input type="hidden" name="location" id="selected-location-input" />
@@ -97,17 +97,6 @@
             specs.push(["Core ID", d.tapeCoreId]);
             specs.push(["Finish", d.tapeFinish]);
             specs.push(["Adhesive GSM", d.tapeAdhesiveGsm]);
-          } else if (order.onModel === "Ttr") {
-            specs.push(["TTR Type", d.ttrType]);
-            specs.push(["Color", d.ttrColor]);
-            specs.push(["Material Code", d.ttrMaterialCode]);
-            specs.push(["Width", d.ttrWidth]);
-            specs.push(["Meters", d.ttrMtrs]);
-            specs.push(["Ink Face", d.ttrInkFace]);
-            specs.push(["Core ID", d.ttrCoreId]);
-            specs.push(["Core Length", d.ttrCoreLength]);
-            specs.push(["Notch", d.ttrNotch]);
-            specs.push(["Winding", d.ttrWinding]);
           } else if (order.onModel === "PosRoll") {
             specs.push(["Paper Code", d.posPaperCode]);
             specs.push(["Paper Type", d.posPaperType]);
@@ -425,7 +414,7 @@
     const remarks = document.getElementById('edit-log-remarks').value;
 
     try {
-      const resp = await fetch(`/fairdesk/purchase/log/${logId}`, {
+      const resp = await fetch(`/sachiko/purchase/log/${logId}`, {
         method: 'PUT',
         headers: { 
           'Content-Type': 'application/json',
@@ -456,7 +445,7 @@
   async function submitDeleteLog() {
     const logId = document.getElementById('delete-log-id').value;
     try {
-      const resp = await fetch(`/fairdesk/purchase/log/${logId}`, {
+      const resp = await fetch(`/sachiko/purchase/log/${logId}`, {
         method: 'DELETE',
         headers: { 'X-CSRF-Token': '<%= csrfToken %>' }
       });

@@ -12,12 +12,10 @@ import tapeBindingRoutes from "./routes/inventory/tapeBinding.js";
 import tapeStockRoutes from "./routes/stock/tapeStock.js";
 import posRollStockRoutes from "./routes/stock/posRollStock.js";
 import tafetaStockRoutes from "./routes/stock/tafetaStock.js";
-import ttrStockRoutes from "./routes/stock/ttrStock.js";
 import stockViewRoutes from "./routes/stock/stockView.js";
 import clientFormRoute from "./routes/users/clients.js";
 import posRollBindingRoutes from "./routes/inventory/posRollBinding.js";
 import tafetaBindingRoutes from "./routes/inventory/tafetaBinding.js";
-import ttrBindingRoutes from "./routes/inventory/ttrBinding.js";
 import vendorItemBindingRoutes from "./routes/inventory/vendorItemBinding.js";
 import reorderRoutes from "./routes/inventory/reorder.js";
 import sachikoRoute from "./routes/sachiko/sachiko_route.js";
@@ -433,7 +431,7 @@ app.get("/images/thumb/:folder/:filename", requireAuth, async (req, res) => {
 /* ROUTES */
 const redirectByRole = (role) => {
   if (["admin", "hod", "sales", "hr", "employee"].includes(role)) {
-    return "/fairdesk/welcome";
+    return "/sachiko/welcome";
   }
   return "/login";
 };
@@ -586,10 +584,10 @@ app.get("/logout", (req, res) => {
     res.redirect("/login");
   });
 });
-app.use("/fairdesk/payroll", requireAuth, requireRole(["admin", "hr"]), payrollRoute);
+app.use("/sachiko/payroll", requireAuth, requireRole(["admin", "hr"]), payrollRoute);
 
 /* PROFILE / ACCOUNT SECURITY - Accessible to all roles */
-app.post("/fairdesk/profile/password", requireAuth, async (req, res) => {
+app.post("/sachiko/profile/password", requireAuth, async (req, res) => {
   try {
     const { oldPassword, newPassword, confirmPassword } = req.body;
     const authUser = req.session.authUser;
@@ -603,8 +601,13 @@ app.post("/fairdesk/profile/password", requireAuth, async (req, res) => {
       return res.status(404).json({ success: false, message: "Employee record not found." });
     }
 
-    if (employee.password !== oldPassword) {
+    const isMatch = await employee.comparePassword(String(oldPassword || "").trim());
+    if (!isMatch) {
       return res.status(400).json({ success: false, message: "Current password is incorrect." });
+    }
+
+    if (confirmPassword !== undefined && newPassword !== confirmPassword) {
+      return res.status(400).json({ success: false, message: "New password and confirmation do not match." });
     }
 
     employee.password = newPassword;
@@ -617,23 +620,21 @@ app.post("/fairdesk/profile/password", requireAuth, async (req, res) => {
   }
 });
 
-app.use("/fairdesk/loan", requireAuth, requireRole(["admin", "hr"]), loanRoute);
-app.use("/fairdesk/advance", requireAuth, requireRole(["admin", "hr"]), advanceRoute);
-app.use("/fairdesk/employee", requireAuth, requireRole(["admin", "hr", "sales"]), employeeRoute);
-app.use("/fairdesk/pettycash", requireAuth, requireRole(["admin", "hr", "sales"]), pettycashRoute);
-app.use("/fairdesk/client", requireAuth, requireRole(["admin", "hod", "sales", "master"]), clientFormRoute);
-app.use("/fairdesk", requireAuth, requireRole(["admin", "hod", "sales", "hr"]), fairdeskRoute);
-app.use("/fairdesk", requireAuth, requireRole(["admin", "hod", "sales"]), tapeBindingRoutes);
-app.use("/fairdesk", requireAuth, requireRole(["admin", "hod", "sales"]), posRollBindingRoutes);
-app.use("/fairdesk", requireAuth, requireRole(["admin", "hod", "sales"]), tafetaBindingRoutes);
-app.use("/fairdesk", requireAuth, requireRole(["admin", "hod", "sales"]), ttrBindingRoutes);
-app.use("/fairdesk", requireAuth, requireRole(["admin", "hod", "sales"]), vendorItemBindingRoutes);
-app.use("/fairdesk/tapestock", requireAuth, requireRole(["admin", "hod", "sales"]), tapeStockRoutes);
-app.use("/fairdesk/posrollstock", requireAuth, requireRole(["admin", "hod", "sales"]), posRollStockRoutes);
-app.use("/fairdesk/tafetastock", requireAuth, requireRole(["admin", "hod", "sales"]), tafetaStockRoutes);
-app.use("/fairdesk/ttrstock", requireAuth, requireRole(["admin", "hod", "sales"]), ttrStockRoutes);
-app.use("/fairdesk/stocks", requireAuth, requireRole(["admin", "hod", "sales"]), stockViewRoutes);
-app.use("/fairdesk/inventory", requireAuth, requireRole(["admin", "hod", "sales"]), reorderRoutes);
+app.use("/sachiko/loan", requireAuth, requireRole(["admin", "hr"]), loanRoute);
+app.use("/sachiko/advance", requireAuth, requireRole(["admin", "hr"]), advanceRoute);
+app.use("/sachiko/employee", requireAuth, requireRole(["admin", "hr", "sales"]), employeeRoute);
+app.use("/sachiko/pettycash", requireAuth, requireRole(["admin", "hr", "sales"]), pettycashRoute);
+app.use("/sachiko/client", requireAuth, requireRole(["admin", "hod", "sales", "master"]), clientFormRoute);
+app.use("/sachiko", requireAuth, requireRole(["admin", "hod", "sales", "hr"]), fairdeskRoute);
+app.use("/sachiko", requireAuth, requireRole(["admin", "hod", "sales"]), tapeBindingRoutes);
+app.use("/sachiko", requireAuth, requireRole(["admin", "hod", "sales"]), posRollBindingRoutes);
+app.use("/sachiko", requireAuth, requireRole(["admin", "hod", "sales"]), tafetaBindingRoutes);
+app.use("/sachiko", requireAuth, requireRole(["admin", "hod", "sales"]), vendorItemBindingRoutes);
+app.use("/sachiko/tapestock", requireAuth, requireRole(["admin", "hod", "sales"]), tapeStockRoutes);
+app.use("/sachiko/posrollstock", requireAuth, requireRole(["admin", "hod", "sales"]), posRollStockRoutes);
+app.use("/sachiko/tafetastock", requireAuth, requireRole(["admin", "hod", "sales"]), tafetaStockRoutes);
+app.use("/sachiko/stocks", requireAuth, requireRole(["admin", "hod", "sales"]), stockViewRoutes);
+app.use("/sachiko/inventory", requireAuth, requireRole(["admin", "hod", "sales"]), reorderRoutes);
 app.use("/sachiko", requireAuth, requireRole(["admin", "hod"]), sachikoRoute);
 
 

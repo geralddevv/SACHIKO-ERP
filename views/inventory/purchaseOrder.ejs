@@ -84,7 +84,7 @@
   <%# ===================== EDIT MODE (single item) ===================== %>
   <% if (typeof orderToEdit !== 'undefined' && orderToEdit) { %>
 
-  <form id="purchase-order-form" action="/fairdesk/inventory/purchase/order" method="post" class="needs-validation" autocomplete="off" novalidate>
+  <form id="purchase-order-form" action="/sachiko/inventory/purchase/order" method="post" class="needs-validation" autocomplete="off" novalidate>
     <input type="hidden" name="_csrf"    value="<%= csrfToken %>" />
     <input type="hidden" name="orderId"  value="<%= orderToEdit._id %>" />
 
@@ -141,7 +141,6 @@
         <option value="Tape">Tape</option>
         <option value="PosRoll">POS Roll</option>
         <option value="Tafeta">Tafeta</option>
-        <option value="Ttr">TTR</option>
       </select>
     </div>
     <div class="span-seven">
@@ -187,7 +186,7 @@
   <% } else { %>
   <%# ===================== CREATE MODE (multi-item cart) ===================== %>
 
-  <form id="multi-po-form" action="/fairdesk/inventory/purchase/order-multi" method="post" style="border:none; padding:0; gap:10px; background:transparent;" autocomplete="off">
+  <form id="multi-po-form" action="/sachiko/inventory/purchase/order-multi" method="post" style="border:none; padding:0; gap:10px; background:transparent;" autocomplete="off">
     <input type="hidden" name="_csrf"  value="<%= csrfToken %>" />
     <input type="hidden" name="items"  id="f-items" />
 
@@ -232,7 +231,6 @@
         <option value="Tape">Tape</option>
         <option value="PosRoll">POS Roll</option>
         <option value="Tafeta">Tafeta</option>
-        <option value="Ttr">TTR</option>
       </select>
     </div>
 
@@ -322,7 +320,7 @@
     <!-- Submit -->
     <div class="span-full btn-grp" style="margin-top:8px; display:flex; flex-direction:row; gap:16px; align-items:center; justify-content:center; border:none; padding:0;">
       <button type="button"
-        onclick="window.location.href='/fairdesk/purchase/pending'"
+        onclick="window.location.href='/sachiko/purchase/pending'"
         style="flex:1; padding:12px 32px; background:#044A78; color:#fff; border-radius:10px; font-weight:700; font-size:15px; border:none; display:flex; align-items:center; justify-content:center; gap:8px; cursor:pointer; transition:all .2s; box-shadow:0 4px 6px rgba(4,74,120,.15);"
         onmouseover="this.style.background='#033d63'; this.style.transform='translateY(-1px)';"
         onmouseout="this.style.background='#044A78'; this.style.transform='none';"
@@ -533,7 +531,6 @@
     if (details.type === 'Tape')    { push('Product ID', details.productId); push('Paper Code', details.paperCode); push('GSM', details.gsm); push('Width', details.width); push('Meters', details.mtrs); push('Finish', details.finish); push('Vendor Paper Code', details.vendorPaperCode); push('Vendor GSM', details.vendorGsm); push('Min Qty', details.minQty); }
     else if (details.type === 'PosRoll') { push('Product ID', details.productId); push('Paper Code', details.paperCode); push('GSM', details.gsm); push('Width', details.width); push('Meters', details.mtrs); push('Vendor Paper Code', details.vendorPaperCode); push('Min Qty', details.minQty); }
     else if (details.type === 'Tafeta')  { push('Product ID', details.productId); push('Material Code', details.materialCode); push('GSM', details.gsm); push('Width', details.width); push('Meters', details.mtrs); push('Vendor Material Code', details.vendorPaperCode); push('Min Qty', details.minQty); }
-    else if (details.type === 'Ttr')     { push('Product ID', details.productId); push('Type', details.ttrType); push('Width', details.width); push('Meters', details.mtrs); push('Color', details.color); push('Ink Face', details.inkFace); push('Min Qty', details.minQty); }
     el.innerHTML = `<div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:4px 8px;">
       ${entries.map(([l,v]) => `<div style="display:grid; grid-template-columns:140px 1fr; gap:6px; padding:4px 6px; border-bottom:1px solid #eef2f7;">
         <div style="font-size:12px; color:#6b7280;">${l}</div>
@@ -580,7 +577,7 @@
   async function loadCoordinators(vendorId) {
     if (!vendorId) { resetCoordinators(); return; }
     try {
-      const res  = await fetch(`/fairdesk/inventory/purchase/coordinators/${encodeURIComponent(vendorId)}`);
+      const res  = await fetch(`/sachiko/inventory/purchase/coordinators/${encodeURIComponent(vendorId)}`);
       const data = await res.json();
       if (!data.length) { setSelectOptions(coordinatorSelect, [], 'No coordinators found'); return; }
       
@@ -643,7 +640,7 @@
     if (listEl) listEl.innerHTML = '<div style="padding:20px; text-align:center; color:#9ca3af; font-size:13px;">Loading items...</div>';
 
     try {
-      const res  = await fetch(`/fairdesk/inventory/purchase/items/${encodeURIComponent(type)}/${encodeURIComponent(vendorUserId)}`);
+      const res  = await fetch(`/sachiko/inventory/purchase/items/${encodeURIComponent(type)}/${encodeURIComponent(vendorUserId)}`);
       fetchedAvailableItems = await res.json();
       renderAvailableItems();
       autoAddFromReorder();
@@ -784,7 +781,7 @@
     }
 
     // type badge colours
-    const typeColors = { Tape:'#0369a1', PosRoll:'#7c3aed', Tafeta:'#065f46', Ttr:'#92400e' };
+    const typeColors = { Tape:'#0369a1', PosRoll:'#7c3aed', Tafeta:'#065f46' };
 
     cart.forEach((item, idx) => {
       const row = document.createElement('div');

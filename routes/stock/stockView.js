@@ -3,15 +3,12 @@ import mongoose from "mongoose";
 import Tape from "../../models/inventory/tape.js";
 import PosRoll from "../../models/inventory/posRoll.js";
 import Tafeta from "../../models/inventory/tafeta.js";
-import Ttr from "../../models/inventory/ttr.js";
 import TapeStock from "../../models/inventory/TapeStock.js";
 import TapeStockLog from "../../models/inventory/TapeStockLog.js";
 import PosRollStock from "../../models/inventory/PosRollStock.js";
 import PosRollStockLog from "../../models/inventory/PosRollStockLog.js";
 import TafetaStock from "../../models/inventory/TafetaStock.js";
 import TafetaStockLog from "../../models/inventory/TafetaStockLog.js";
-import TtrStock from "../../models/inventory/TtrStock.js";
-import TtrStockLog from "../../models/inventory/TtrStockLog.js";
 import TapeSalesOrder from "../../models/inventory/TapeSalesOrder.js";
 import { requireAuth } from "../../middleware/auth.js";
 import { createLimiter, updateLimiter, deleteLimiter } from "../../utils/limiters.js";
@@ -43,13 +40,6 @@ const STOCK_CONFIG = {
     itemField: "tafeta",
     itemLabel: "Tafeta",
     onModel: "Tafeta",
-  },
-  TTR: {
-    stockModel: TtrStock,
-    logModel: TtrStockLog,
-    itemField: "ttr",
-    itemLabel: "TTR",
-    onModel: "Ttr",
   },
 };
 
@@ -257,7 +247,7 @@ router.get("/view", async (req, res) => {
         buildProductId: (master) => master.tapeProductId,
         buildSpec: (master) =>
           `${master.tapePaperCode || ""} ${master.tapeGsm ? master.tapeGsm + "gsm" : ""}`.trim() || master.tapeProductId,
-        buildProfileUrl: (itemId) => `/fairdesk/tape/profile/${itemId}`,
+        buildProfileUrl: (itemId) => `/sachiko/tape/profile/${itemId}`,
       }),
       loadStockRows({
         stockModel: PosRollStock,
@@ -269,7 +259,7 @@ router.get("/view", async (req, res) => {
         buildProductId: (master) => master.posProductId,
         buildSpec: (master) =>
           `${master.posPaperCode || ""} ${master.posGsm ? master.posGsm + "gsm" : ""}`.trim() || master.posProductId,
-        buildProfileUrl: (itemId) => `/fairdesk/pos-roll/profile/${itemId}`,
+        buildProfileUrl: (itemId) => `/sachiko/pos-roll/profile/${itemId}`,
       }),
       loadStockRows({
         stockModel: TafetaStock,
@@ -282,20 +272,7 @@ router.get("/view", async (req, res) => {
         buildProductId: (master) => master.tafetaProductId,
         buildSpec: (master) =>
           `${master.tafetaMaterialCode || ""} ${master.tafetaGsm ? master.tafetaGsm + "gsm" : ""}`.trim() || master.tafetaProductId,
-        buildProfileUrl: (itemId) => `/fairdesk/tafeta/profile/${itemId}`,
-      }),
-      loadStockRows({
-        stockModel: TtrStock,
-        itemField: "ttr",
-        masterModel: Ttr,
-        masterSelect:
-          "ttrProductId ttrType ttrColor ttrMaterialCode ttrWidth ttrMtrs ttrCoreId ttrCoreLength ttrWinding",
-        onModel: "Ttr",
-        itemType: "TTR",
-        buildProductId: (master) => master.ttrProductId,
-        buildSpec: (master) =>
-          `${master.ttrType || ""} ${master.ttrWidth || ""}mm x ${master.ttrMtrs || ""}m`.replace(/\s+/g, " ").trim() || master.ttrProductId,
-        buildProfileUrl: (itemId) => `/fairdesk/ttr/profile/${itemId}`,
+        buildProfileUrl: (itemId) => `/sachiko/tafeta/profile/${itemId}`,
       }),
     ]);
 
@@ -314,7 +291,6 @@ router.get("/view", async (req, res) => {
       posQty: rows.filter(r => r.itemType === "POS Roll").reduce((sum, row) => sum + toNumber(row.quantity), 0),
       tafetaQty: rows.filter(r => r.itemType === "Tafeta").reduce((sum, row) => sum + toNumber(row.quantity), 0),
       tapeQty: rows.filter(r => r.itemType === "Tape").reduce((sum, row) => sum + toNumber(row.quantity), 0),
-      ttrQty: rows.filter(r => r.itemType === "TTR").reduce((sum, row) => sum + toNumber(row.quantity), 0),
       totalBooked: rows.reduce((sum, row) => sum + toNumber(row.booked), 0),
       totalBalance: rows.reduce((sum, row) => sum + toNumber(row.balance), 0),
       totalLocations: new Set(rows.map((row) => row.location)).size,
@@ -332,7 +308,7 @@ router.get("/view", async (req, res) => {
   } catch (err) {
     console.error("Failed to load stock summary", err);
     req.flash("notification", "Failed to load stock summary");
-    res.redirect("/fairdesk");
+    res.redirect("/sachiko");
   }
 });
 
@@ -343,13 +319,13 @@ router.post("/edit/:itemType/:itemId/:location", requireAuth, updateLimiter, asy
     const cfg = getStockConfig(itemType);
     if (!cfg) {
       req.flash("notification", "Invalid stock item type");
-      return res.redirect("/fairdesk/stocks/view");
+      return res.redirect("/sachiko/stocks/view");
     }
 
     const newQuantity = Number(quantity);
     if (!Number.isFinite(newQuantity) || newQuantity < 0) {
       req.flash("notification", "Enter a valid stock quantity");
-      return res.redirect("/fairdesk/stocks/view");
+      return res.redirect("/sachiko/stocks/view");
     }
 
     const snapshot = await getStockSnapshot({
@@ -362,13 +338,13 @@ router.post("/edit/:itemType/:itemId/:location", requireAuth, updateLimiter, asy
 
     if (newQuantity < snapshot.booked) {
       req.flash("notification", `Cannot reduce below booked quantity (${snapshot.booked}).`);
-      return res.redirect("/fairdesk/stocks/view");
+      return res.redirect("/sachiko/stocks/view");
     }
 
     const delta = newQuantity - snapshot.currentStock;
     if (delta === 0) {
       req.flash("notification", "Stock quantity is already up to date.");
-      return res.redirect("/fairdesk/stocks/view");
+      return res.redirect("/sachiko/stocks/view");
     }
 
     await applyStockDelta({
@@ -383,11 +359,11 @@ router.post("/edit/:itemType/:itemId/:location", requireAuth, updateLimiter, asy
     });
 
     req.flash("notification", `${cfg.itemLabel} stock updated successfully.`);
-    return res.redirect("/fairdesk/stocks/view");
+    return res.redirect("/sachiko/stocks/view");
   } catch (err) {
     console.error("STOCK EDIT ERROR:", err);
     req.flash("notification", "Failed to update stock");
-    return res.redirect("/fairdesk/stocks/view");
+    return res.redirect("/sachiko/stocks/view");
   }
 });
 
@@ -397,7 +373,7 @@ router.post("/delete/:itemType/:itemId/:location", requireAuth, deleteLimiter, a
     const cfg = getStockConfig(itemType);
     if (!cfg) {
       req.flash("notification", "Invalid stock item type");
-      return res.redirect("/fairdesk/stocks/view");
+      return res.redirect("/sachiko/stocks/view");
     }
 
     const snapshot = await getStockSnapshot({
@@ -410,12 +386,12 @@ router.post("/delete/:itemType/:itemId/:location", requireAuth, deleteLimiter, a
 
     if (snapshot.booked > 0) {
       req.flash("notification", `Cannot delete stock with booked quantity (${snapshot.booked}).`);
-      return res.redirect("/fairdesk/stocks/view");
+      return res.redirect("/sachiko/stocks/view");
     }
 
     if (snapshot.currentStock === 0) {
       req.flash("notification", "Stock entry is already empty.");
-      return res.redirect("/fairdesk/stocks/view");
+      return res.redirect("/sachiko/stocks/view");
     }
 
     await applyStockDelta({
@@ -430,11 +406,11 @@ router.post("/delete/:itemType/:itemId/:location", requireAuth, deleteLimiter, a
     });
 
     req.flash("notification", `${cfg.itemLabel} stock deleted successfully.`);
-    return res.redirect("/fairdesk/stocks/view");
+    return res.redirect("/sachiko/stocks/view");
   } catch (err) {
     console.error("STOCK DELETE ERROR:", err);
     req.flash("notification", "Failed to delete stock");
-    return res.redirect("/fairdesk/stocks/view");
+    return res.redirect("/sachiko/stocks/view");
   }
 });
 

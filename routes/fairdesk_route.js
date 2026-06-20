@@ -8,13 +8,10 @@ import Vendor from "../models/users/vendor.js";
 import VendorUser from "../models/users/vendorUser.js";
 import Employee from "../models/hr/employee_model.js";
 import Label from "../models/inventory/labels.js";
-import Ttr from "../models/inventory/ttr.js";
 import Tape from "../models/inventory/tape.js";
 import TapeBinding from "../models/inventory/tapeBinding.js";
 import TapeSalesOrder from "../models/inventory/TapeSalesOrder.js";
 import PurchaseOrder from "../models/inventory/PurchaseOrder.js";
-import SystemId from "../models/system/systemId.js";
-import Carelead from "../models/carelead.js";
 import Calculator from "../models/utilities/calculator.js";
 import Block from "../models/utilities/block_model.js";
 import Die from "../models/utilities/die_model.js";
@@ -28,18 +25,17 @@ import PosRollBinding from "../models/inventory/posRollBinding.js";
 import TafetaBinding from "../models/inventory/tafetaBinding.js";
 import PosRollStock from "../models/inventory/PosRollStock.js";
 import TafetaStock from "../models/inventory/TafetaStock.js";
-import TtrBinding from "../models/inventory/ttrBinding.js";
-import VendorTtrBinding from "../models/inventory/vendorTtrBinding.js";
 import VendorTapeBinding from "../models/inventory/vendorTapeBinding.js";
 import VendorPosRollBinding from "../models/inventory/vendorPosRollBinding.js";
 import VendorTafetaBinding from "../models/inventory/vendorTafetaBinding.js";
-import TtrStock from "../models/inventory/TtrStock.js";
 import PosRollStockLog from "../models/inventory/PosRollStockLog.js";
 import TafetaStockLog from "../models/inventory/TafetaStockLog.js";
-import TtrStockLog from "../models/inventory/TtrStockLog.js";
 import Location from "../models/system/location.js";
+import Machine from "../models/system/machine.js";
 import Counter from "../models/system/counter.js";
 import Sample from "../models/inventory/sample.js";
+import SachikoDatasheet from "../models/sachiko/sachikoDatasheet.js";
+import SachikoSalesOrder from "../models/sachiko/sachikoSalesOrder.js";
 import { escapeRegex } from "../utils/security.js";
 import { requireAuth } from "../middleware/auth.js";
 import { createLimiter, updateLimiter, deleteLimiter } from "../utils/limiters.js";
@@ -64,117 +60,6 @@ function canonicalizeLocationName(value) {
 
 function toNumber(value) {
   return Number(value || 0);
-}
-
-async function getTtrStockSummary(ttrId, excludeOrderId = null) {
-  const ttrObjectId = new mongoose.Types.ObjectId(ttrId);
-  const bookedMatch = {
-    tapeId: ttrObjectId,
-    onModel: "Ttr",
-    status: "PENDING",
-  };
-  if (excludeOrderId) {
-    bookedMatch._id = { $ne: new mongoose.Types.ObjectId(excludeOrderId) };
-  }
-
-  const [stockAggregation, bookedAggregation] = await Promise.all([
-    TtrStock.aggregate([
-      { $match: { ttr: ttrObjectId } },
-      {
-        $group: {
-          _id: {
-            location: { $toUpper: { $ifNull: ["$location", "UNKNOWN"] } },
-          },
-          qty: { $sum: "$quantity" },
-        },
-      },
-      { $sort: { "_id.location": 1 } },
-    ]),
-    TapeSalesOrder.aggregate([
-      { $match: bookedMatch },
-      {
-        $group: {
-          _id: {
-            location: { $toUpper: { $ifNull: ["$sourceLocation", "UNKNOWN"] } },
-          },
-          bookedQty: {
-            $sum: { $max: [0, { $subtract: ["$quantity", { $ifNull: ["$dispatchedQuantity", 0] }] }] },
-          },
-        },
-      },
-    ]),
-  ]);
-
-  const stockMap = new Map(
-    stockAggregation.map((row) => [canonicalizeLocationName(row._id?.location), toNumber(row.qty)]),
-  );
-  const bookedMap = new Map(
-    bookedAggregation.map((row) => [canonicalizeLocationName(row._id?.location), toNumber(row.bookedQty)]),
-  );
-
-  const locations = Array.from(new Set([...stockMap.keys(), ...bookedMap.keys()]))
-    .filter(Boolean)
-    .sort((a, b) => a.localeCompare(b))
-    .map((location) => {
-      const qty = toNumber(stockMap.get(location));
-      const booked = toNumber(bookedMap.get(location));
-      return {
-        location,
-        qty,
-        booked,
-        balance: qty - booked,
-      };
-    })
-    .filter((entry) => entry.qty !== 0 || entry.booked !== 0);
-
-  const totalStock = locations.reduce((sum, entry) => sum + toNumber(entry.qty), 0);
-  const totalBooked = locations.reduce((sum, entry) => sum + toNumber(entry.booked), 0);
-  const totalBalance = totalStock - totalBooked;
-
-  return {
-    locations,
-    totalStock,
-    totalBooked,
-    totalBalance,
-    booked: totalBooked, // for compatibility
-    balance: totalBalance, // for compatibility
-  };
-}
-
-async function applyTtrStockDelta({ ttrId, location, delta, remarks, createdBy }) {
-  const normalizedLocation = canonicalizeLocationName(location) || "UNKNOWN";
-  const ttrObjectId = new mongoose.Types.ObjectId(ttrId);
-  const [balanceRow] = await TtrStock.aggregate([
-    { $match: { ttr: ttrObjectId, location: normalizedLocation } },
-    { $group: { _id: null, qty: { $sum: "$quantity" } } },
-  ]);
-  const openingStock = toNumber(balanceRow?.qty);
-  const closingStock = openingStock + delta;
-
-  if (delta === 0) {
-    return { openingStock, closingStock, changed: false };
-  }
-
-  await TtrStock.create({
-    ttr: ttrObjectId,
-    location: normalizedLocation,
-    quantity: delta,
-    remarks,
-  });
-
-  await TtrStockLog.create({
-    ttr: ttrObjectId,
-    location: normalizedLocation,
-    openingStock,
-    quantity: Math.abs(delta),
-    closingStock,
-    type: delta > 0 ? "INWARD" : "OUTWARD",
-    source: "MANUAL",
-    remarks,
-    createdBy: createdBy || "SYSTEM",
-  });
-
-  return { openingStock, closingStock, changed: true };
 }
 
 function getProfileStockConfig(itemType) {
@@ -206,20 +91,6 @@ function getProfileStockConfig(itemType) {
       logModel: TafetaStockLog,
       itemField: "tafeta",
       onModel: "Tafeta",
-    },
-    TTR: {
-      itemLabel: "TTR",
-      stockModel: TtrStock,
-      logModel: TtrStockLog,
-      itemField: "ttr",
-      onModel: "Ttr",
-    },
-    Ttr: {
-      itemLabel: "TTR",
-      stockModel: TtrStock,
-      logModel: TtrStockLog,
-      itemField: "ttr",
-      onModel: "Ttr",
     },
   };
   return map[itemType] || null;
@@ -502,11 +373,9 @@ router.use((req, res, next) => {
       "/tape/view",
       "/pos-roll/view",
       "/tafeta/view",
-      "/ttr/view",
       "/form/tape-binding",
       "/form/pos-roll-binding",
       "/form/tafeta-binding",
-      "/form/ttr-binding",
       "/stocks/view",
       "/pettycash/view",
     ];
@@ -517,15 +386,12 @@ router.use((req, res, next) => {
       /^\/tape\/profile\/[^/]+$/,
       /^\/pos-roll\/profile\/[^/]+$/,
       /^\/tafeta\/profile\/[^/]+$/,
-      /^\/ttr\/profile\/[^/]+$/,
       /^\/tape\/edit\/[^/]+$/,
       /^\/pos-roll\/edit\/[^/]+$/,
       /^\/tafeta\/edit\/[^/]+$/,
-      /^\/ttr\/edit\/[^/]+$/,
       /^\/form\/tape-binding(?:\/.*)?$/,
       /^\/form\/pos-roll-binding(?:\/.*)?$/,
       /^\/form\/tafeta-binding(?:\/.*)?$/,
-      /^\/form\/ttr-binding(?:\/.*)?$/,
       /^\/api\/motivational$/,
       /^\/form\/labels\/.*$/,
       /^\/api\/locations$/,
@@ -537,11 +403,9 @@ router.use((req, res, next) => {
       /^\/form\/tape-binding$/,
       /^\/form\/pos-roll-binding$/,
       /^\/form\/tafeta-binding$/,
-      /^\/form\/ttr-binding$/,
       /^\/tape\/edit\/[^/]+$/,
       /^\/pos-roll\/edit\/[^/]+$/,
       /^\/tafeta\/edit\/[^/]+$/,
-      /^\/ttr\/edit\/[^/]+$/,
       /^\/pettycash\/create$/,
     ];
 
@@ -549,7 +413,7 @@ router.use((req, res, next) => {
       const normalizedPath = path.toLowerCase().replace(/\/$/, "");
       
       // Explicit keyword matches for resilience
-      const keywords = ["master/view", "compare", "binding", "welcome", "api/motivational", "tape/view", "pos-roll/view", "tafeta/view", "ttr/view", "client", "vendor", "user", "stocks", "pettycash"];
+      const keywords = ["master/view", "compare", "binding", "welcome", "api/motivational", "tape/view", "pos-roll/view", "tafeta/view", "client", "vendor", "user", "stocks", "pettycash"];
       if (keywords.some(k => normalizedPath.includes(k))) return next();
 
       if (allowedGetRoutes.includes(normalizedPath) || allowedGetPatterns.some((re) => re.test(path))) {
@@ -792,7 +656,7 @@ router.post("/form/client", requireAuth, createLimiter, async (req, res) => {
 
     await Client.create(formData);
     req.flash("notification", "Client created successfully!");
-    res.json({ success: true, redirect: "/fairdesk/client/view" });
+    res.json({ success: true, redirect: "/sachiko/client/view" });
   } catch (err) {
     console.error(err);
     if (err?.code === 11000) {
@@ -902,7 +766,7 @@ router.post("/form/user", requireAuth, createLimiter, async (req, res) => {
     await client.save();
 
     req.flash("notification", "User created successfully!");
-    res.json({ success: true, redirect: "/fairdesk/master/view" });
+    res.json({ success: true, redirect: "/sachiko/master/view" });
   } catch (err) {
     console.error(err);
     if (err?.code === 11000) {
@@ -962,7 +826,7 @@ router.post("/form/labels", requireAuth, createLimiter, async (req, res) => {
     await user.save();
 
     req.flash("notification", "Label created successfully!");
-    res.json({ success: true, redirect: "/fairdesk/form/labels" });
+    res.json({ success: true, redirect: "/sachiko/form/labels" });
   } catch (err) {
     console.error(err);
     res.status(400).json({ success: false, message: err.message });
@@ -1082,367 +946,9 @@ router.post("/form/samples", requireAuth, createLimiter, async (req, res) => {
     await Sample.create({ ...req.body, sampleCode, sampleCategory: activeTab, sampleMaterial: material });
 
     req.flash("notification", `${activeTab === "client" ? "Client" : "Vendor"} sample submitted successfully!`);
-    res.json({ success: true, redirect: `/fairdesk/form/samples?tab=${activeTab}` });
+    res.json({ success: true, redirect: `/sachiko/form/samples?tab=${activeTab}` });
   } catch (err) {
     console.error(err);
-    res.status(400).json({ success: false, message: err.message });
-  }
-});
-
-// ----------------------------------CareLead---------------------------------->
-// route for carelead form.
-router.get("/form/carelead", (req, res) => {
-  res.render("care/carelead.ejs", {
-    title: "Care Lead",
-    JS: false,
-    CSS: false,
-    notification: req.flash("notification"),
-  });
-});
-
-// Route to handle carelead form submission.
-router.post("/form/carelead", requireAuth, createLimiter, async (req, res) => {
-  let formData = req.body;
-
-  await Carelead.create(formData);
-  res.send("care lead created successfully!");
-});
-
-// ----------------------------------CareCallReport---------------------------------->
-// route for carecallreport form.
-router.get("/form/carecallreport", (req, res) => {
-  res.render("care/careCallReport.ejs", {
-    title: "Care Call Report",
-    JS: false,
-    CSS: false,
-    notification: req.flash("notification"),
-  });
-});
-
-// Route to handle carecallreport form submission.
-router.post("/form/carecallreport", requireAuth, createLimiter, async (req, res) => {
-  let formData = req.body;
-
-  await Carelead.create(formData);
-  res.send("care call report created successfully!");
-});
-
-// ----------------------------------SystemId---------------------------------->
-// route for systemid form.
-router.get("/form/systemid", async (req, res) => {
-  let systemIdCount = await SystemId.countDocuments();
-  res.render("care/systemId.ejs", {
-    systemIdCount,
-    title: "System ID",
-    JS: false,
-    CSS: false,
-    notification: req.flash("notification"),
-  });
-});
-
-// Route to handle systemid form submission.
-router.post("/form/systemid", requireAuth, createLimiter, async (req, res) => {
-  let formData = req.body;
-
-  await SystemId.create(formData);
-  res.send("care call report created successfully!");
-});
-
-// ----------------------------------WorkshopReport---------------------------------->
-// route for careworkshopreport form.
-router.get("/form/careworkshopreport", (req, res) => {
-  res.render("care/careWokshopReport.ejs", {
-    title: "Care Workshop Report",
-    JS: false,
-    CSS: false,
-    notification: req.flash("notification"),
-  });
-});
-
-// Route to handle careworkshopreport form submission.
-router.post("/form/careworkshopreport", requireAuth, createLimiter, async (req, res) => {
-  let formData = req.body;
-
-  await Carelead.create(formData);
-  res.send("care call report created successfully!");
-});
-
-// ----------------------------------CareQuote---------------------------------->
-// route for carequote form.
-router.get("/form/carequote", (req, res) => {
-  res.render("care/careQuote.ejs", {
-    title: "Care Quote",
-    JS: false,
-    CSS: false,
-    notification: req.flash("notification"),
-  });
-});
-
-// Route to handle carequote form submission.
-router.post("/form/carequote", requireAuth, createLimiter, async (req, res) => {
-  let formData = req.body;
-
-  await Carelead.create(formData);
-  res.send("care quote created successfully!");
-});
-
-// ----------------------------------TTR---------------------------------->
-function normalizeTtrPart(value) {
-  if (value === undefined || value === null) return "";
-  return String(value).trim();
-}
-
-function normalizeTtrCoreId(value) {
-  const raw = normalizeTtrPart(value);
-  if (!raw) return "";
-  const numeric = Number(raw);
-  return Number.isFinite(numeric) ? String(numeric) : raw;
-}
-
-function buildTtrSignature(source) {
-  return [
-    normalizeTtrPart(source.ttrType),
-    normalizeTtrPart(source.ttrColor),
-    normalizeTtrPart(source.ttrMaterialCode),
-    normalizeTtrPart(source.ttrWidth),
-    normalizeTtrPart(source.ttrMtrs),
-    normalizeTtrPart(source.ttrInkFace),
-    normalizeTtrCoreId(source.ttrCoreId),
-    normalizeTtrPart(source.ttrCoreLength),
-    normalizeTtrPart(source.ttrNotch),
-    normalizeTtrPart(source.ttrWinding),
-  ].join("||");
-}
-
-const DEFAULT_TTR_SPECS = {
-  ttrWidth: 0,
-  ttrMtrs: 0,
-  ttrInkFace: "OUT",
-  ttrCoreId: "1",
-  ttrCoreLength: 0,
-  ttrNotch: "NO",
-  ttrWinding: "NORMAL",
-};
-
-const DEFAULT_VENDOR_TTR_OVERRIDES = {
-  ttrMtrsDel: "0",
-  ttrRatePerRoll: 0,
-  ttrSaleCost: 0,
-  ttrOdrQty: 1,
-  ttrOdrFreq: "N/A",
-  ttrCreditTerm: "N/A",
-  vendorTapePaperCode: "N/A",
-  vendorTapeGsm: 0,
-  tapeMtrsDel: 0,
-  tapeRatePerRoll: 0,
-  tapeSaleCost: 0,
-  tapeMinQty: 1,
-  tapeOdrQty: 1,
-  tapeOdrFreq: "N/A",
-  tapeCreditTerm: "N/A",
-};
-
-const trimOr = (value, fallback = "") => {
-  if (value === undefined || value === null) return fallback;
-  const out = String(value).trim();
-  return out === "" ? fallback : out;
-};
-
-const numOr = (value, fallback = 0) => {
-  const n = Number(value);
-  return Number.isFinite(n) ? n : fallback;
-};
-
-function flexTtrValue(val) {
-  if (val === undefined || val === null) return val;
-  const arr = [val];
-  if (typeof val === "string") {
-    const t = val.trim();
-    if (t !== val) arr.push(t);
-    const n = Number(t);
-    if (t !== "" && !Number.isNaN(n)) arr.push(n);
-  } else {
-    arr.push(String(val));
-  }
-  return { $in: arr };
-}
-
-// GET: TTR Master form
-router.get("/form/ttr", async (req, res) => {
-  const formatTtrProductId = (n) => `FS | TTR | ${String(n).padStart(6, "0")}`;
-  const parseTtrSeq = (productId) => {
-    const match = String(productId || "").match(/(\d{6})$/);
-    return match ? Number(match[1]) : 0;
-  };
-  const getNextTtrProductIdPreview = async () => {
-    const latestTtr = await Ttr.findOne().sort({ ttrProductId: -1 }).select("ttrProductId").lean();
-    let nextSeq = parseTtrSeq(latestTtr?.ttrProductId) + 1;
-
-    while (await Ttr.exists({ ttrProductId: formatTtrProductId(nextSeq) })) {
-      nextSeq += 1;
-    }
-    return formatTtrProductId(nextSeq);
-  };
-
-  const previewTtrProductId = await getNextTtrProductIdPreview();
-
-  res.render("inventory/ttr.ejs", {
-    JS: false,
-    CSS: false,
-    title: "TTR",
-    previewTtrProductId,
-    notification: req.flash("notification"),
-  });
-});
-
-// GET: Check if TTR already exists (used by client-side precheck)
-router.get("/form/ttr/exists", async (req, res) => {
-  try {
-    const normalized = {
-      ...DEFAULT_TTR_SPECS,
-      ...req.query,
-      ttrType: trimOr(req.query.ttrType),
-      ttrColor: trimOr(req.query.ttrColor, "BLACK"),
-      ttrMaterialCode: trimOr(req.query.ttrMaterialCode),
-      ttrInkFace: "OUT",
-    };
-
-    if ([normalized.ttrType, normalized.ttrColor, normalized.ttrMaterialCode].some((v) => trimOr(v) === "")) {
-      return res.json({ exists: false });
-    }
-
-    const signatureSource = { ...DEFAULT_TTR_SPECS, ...normalized };
-    if (buildTtrSignature(signatureSource).split("||").some((part) => part === "")) {
-      return res.json({ exists: false });
-    }
-
-    const ttrSignature = hashSignature(buildTtrSignature(signatureSource));
-    const legacyMatch = {
-      ttrType: flexTtrValue(normalized.ttrType),
-      ttrColor: flexTtrValue(normalized.ttrColor),
-      ttrMaterialCode: flexTtrValue(normalized.ttrMaterialCode),
-      ttrWidth: flexTtrValue(signatureSource.ttrWidth),
-      ttrMtrs: numOr(signatureSource.ttrMtrs),
-      ttrInkFace: flexTtrValue(signatureSource.ttrInkFace),
-      ttrCoreId: flexTtrValue(signatureSource.ttrCoreId),
-      ttrCoreLength: numOr(signatureSource.ttrCoreLength),
-      ttrNotch: flexTtrValue(signatureSource.ttrNotch),
-      ttrWinding: flexTtrValue(signatureSource.ttrWinding),
-    };
-
-    const existingTtr = await Ttr.findOne({
-      $or: [{ ttrSignature }, legacyMatch],
-    })
-      .select("ttrProductId")
-      .lean();
-
-    return res.json({
-      exists: !!existingTtr,
-      id: existingTtr?.ttrProductId || "",
-      ttrId: existingTtr?._id || "",
-      message: existingTtr ? duplicateMasterMessage("TTR", existingTtr.ttrProductId) : "",
-    });
-  } catch (err) {
-    console.error("TTR EXISTS CHECK ERROR:", err);
-    return res.status(500).json({ exists: false });
-  }
-});
-
-// POST: TTR Master submission
-router.post("/form/ttr", requireAuth, createLimiter, async (req, res) => {
-  try {
-    const formatTtrProductId = (n) => `FS | TTR | ${String(n).padStart(6, "0")}`;
-    const parseTtrSeq = (productId) => {
-      const match = String(productId || "").match(/(\d{6})$/);
-      return match ? Number(match[1]) : 0;
-    };
-    const generateTtrProductId = async () => {
-      let nextSeq = parseTtrSeq(
-        (await Ttr.findOne().sort({ ttrProductId: -1 }).select("ttrProductId").lean())?.ttrProductId,
-      ) + 1;
-
-      const maxAttempts = 10000;
-      for (let i = 0; i < maxAttempts; i++) {
-        const candidateId = formatTtrProductId(nextSeq);
-        const exists = await Ttr.exists({ ttrProductId: candidateId });
-        if (!exists) return candidateId;
-        nextSeq += 1;
-      }
-      throw new Error("Unable to generate unique TTR product id");
-    };
-
-    // Prevent duplicates based on TTR specs (productId is always unique).
-    const ttrSignature = hashSignature(buildTtrSignature(req.body));
-    const widthRaw = req.body.ttrWidth;
-    const widthTrim = typeof widthRaw === "string" ? widthRaw.trim() : widthRaw;
-    const widthNum = typeof widthTrim === "string" ? Number(widthTrim) : Number(widthTrim);
-    const widthVal =
-      typeof widthTrim === "string" && widthTrim !== "" && !Number.isNaN(widthNum) ? widthNum : widthTrim;
-    const ttrCoreId = normalizeTtrCoreId(req.body.ttrCoreId);
-    const coreLengthNum = Number(req.body.ttrCoreLength);
-    if (!Number.isFinite(coreLengthNum)) {
-      return res.status(400).json({
-        success: false,
-        message: "Core Length must be a valid number.",
-      });
-    }
-
-    const duplicateTtrQuery = {
-      $or: [
-        { ttrSignature },
-        {
-          ttrType: flexTtrValue(req.body.ttrType),
-          ttrColor: flexTtrValue(req.body.ttrColor),
-          ttrMaterialCode: flexTtrValue(req.body.ttrMaterialCode),
-          ttrWidth: flexTtrValue(widthVal),
-          ttrMtrs: Number(req.body.ttrMtrs),
-          ttrInkFace: flexTtrValue(req.body.ttrInkFace),
-          ttrCoreId: flexTtrValue(ttrCoreId),
-          ttrCoreLength: Number(req.body.ttrCoreLength),
-          ttrNotch: flexTtrValue(req.body.ttrNotch),
-          ttrWinding: flexTtrValue(req.body.ttrWinding),
-        },
-      ],
-    };
-    const alreadyExists = await Ttr.findOne(duplicateTtrQuery).select("ttrProductId").lean();
-    if (alreadyExists) {
-      return res.status(400).json({
-        success: false,
-        message: duplicateMasterMessage("TTR", alreadyExists.ttrProductId),
-      });
-    }
-
-    const data = {
-      ttrProductId: await generateTtrProductId(),
-      ttrType: String(req.body.ttrType).trim(),
-      ttrColor: String(req.body.ttrColor).trim(),
-      ttrMaterialCode: String(req.body.ttrMaterialCode).trim(),
-      ttrWidth: widthVal,
-      ttrMtrs: Number(req.body.ttrMtrs),
-      ttrInkFace: "OUT",
-      ttrCoreId,
-      ttrCoreLength: coreLengthNum,
-      ttrNotch: String(req.body.ttrNotch).trim(),
-      ttrWinding: String(req.body.ttrWinding).trim(),
-      ttrSignature,
-      createdBy: req.user?.username || "SYSTEM",
-    };
-
-    const createdTtr = await Ttr.create(data);
-
-    req.flash("notification", "TTR created successfully!");
-    res.json({ success: true, redirect: "/fairdesk/ttr/view", id: createdTtr._id, ttrProductId: createdTtr.ttrProductId });
-  } catch (err) {
-    console.error(err);
-    if (err?.code === 11000) {
-      const duplicateTtr = await Ttr.findOne({ ttrSignature: hashSignature(buildTtrSignature(req.body)) })
-        .select("ttrProductId")
-        .lean();
-      return res.status(409).json({
-        success: false,
-        message: duplicateMasterMessage("TTR", duplicateTtr?.ttrProductId),
-      });
-    }
     res.status(400).json({ success: false, message: err.message });
   }
 });
@@ -1454,7 +960,6 @@ router.post("/form/ttr", requireAuth, createLimiter, async (req, res) => {
 //   let tapeCount = await Tape.countDocuments();
 
 //   res.render("forms/tape.ejs", {
-//     JS: "ttr.js",
 //     CSS: false,
 //     title: "Tape",
 //     clients,
@@ -1473,7 +978,7 @@ router.post("/form/ttr", requireAuth, createLimiter, async (req, res) => {
 //   await user.save();
 
 //   req.flash("notification", "Tape created successfully!");
-//   res.redirect("/fairdesk/form/tape");
+//   res.redirect("/sachiko/form/tape");
 // });
 
 // ----------------------------------Tape Master---------------------------------->
@@ -1578,7 +1083,7 @@ router.post("/form/tape", requireAuth, createLimiter, async (req, res) => {
     await Tape.create(data);
 
     req.flash("notification", "Tape Master created successfully!");
-    res.json({ success: true, redirect: "/fairdesk/tape/view" });
+    res.json({ success: true, redirect: "/sachiko/tape/view" });
   } catch (err) {
     console.error(err);
     if (err?.code === 11000) {
@@ -1602,7 +1107,7 @@ router.get("/form/edit/user/:userId", async (req, res) => {
 
     if (!user) {
       req.flash("error", "User not found.");
-      return res.redirect("/fairdesk/users/master");
+      return res.redirect("/sachiko/users/master");
     }
 
     res.render("users/editUser", {
@@ -1630,7 +1135,7 @@ router.post("/form/edit/user/:userId", requireAuth, updateLimiter, async (req, r
     const currentUser = await Username.findById(userId);
     if (!currentUser) {
       req.flash("error", "User not found.");
-      return res.redirect("/fairdesk/users/master");
+      return res.redirect("/sachiko/users/master");
     }
 
     const updateData = {
@@ -1715,7 +1220,7 @@ router.post("/form/edit/user/:userId", requireAuth, updateLimiter, async (req, r
     await Username.findByIdAndUpdate(userId, updateData, { new: true, runValidators: true });
 
     req.flash("notification", "User details updated successfully!");
-    res.redirect(`/fairdesk/client/details/${userId}`);
+    res.redirect(`/sachiko/client/details/${userId}`);
   } catch (err) {
     console.error(err);
     req.flash("error", "Error updating user details.");
@@ -1823,7 +1328,7 @@ router.post("/form/pos-roll-master", requireAuth, createLimiter, async (req, res
     await PosRoll.create(data);
 
     req.flash("notification", "POS Roll Master created successfully!");
-    res.json({ success: true, redirect: "/fairdesk/pos-roll/view" });
+    res.json({ success: true, redirect: "/sachiko/pos-roll/view" });
   } catch (err) {
     console.error(err);
     if (err?.code === 11000) {
@@ -1943,7 +1448,7 @@ router.post("/form/tafeta-master", requireAuth, createLimiter, async (req, res) 
     await Tafeta.create(data);
 
     req.flash("notification", "Tafeta Master created successfully!");
-    res.json({ success: true, redirect: "/fairdesk/tafeta/view" });
+    res.json({ success: true, redirect: "/sachiko/tafeta/view" });
   } catch (err) {
     console.error(err);
     if (err?.code === 11000) {
@@ -1988,7 +1493,7 @@ router.post("/form/location", requireAuth, createLimiter, async (req, res) => {
 
     await Location.create({ locationName });
     req.flash("notification", "Location created successfully!");
-    res.json({ success: true, redirect: "/fairdesk/form/location" });
+    res.json({ success: true, redirect: "/sachiko/form/location" });
   } catch (err) {
     console.error(err);
     const msg = err.code === 11000 ? "location already exist" : err.message;
@@ -2011,6 +1516,65 @@ router.get("/api/locations", async (req, res) => {
 router.delete("/api/locations/:id", requireAuth, deleteLimiter, async (req, res) => {
   try {
     await Location.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+// ----------------------------------Machine Master---------------------------------->
+
+// GET: Machine Master form
+router.get("/form/machine", async (req, res) => {
+  const machines = await Machine.find().sort({ machineName: 1 }).lean();
+
+  res.render("inventory/machineMaster.ejs", {
+    JS: false,
+    CSS: false,
+    title: "Machine Master",
+    machines,
+    notification: req.flash("notification"),
+  });
+});
+
+// POST: Machine Master submission
+router.post("/form/machine", requireAuth, createLimiter, async (req, res) => {
+  try {
+    const machineName = String(req.body.machineName || "")
+      .trim()
+      .toUpperCase();
+
+    const alreadyExists = await Machine.exists({ machineName });
+    if (alreadyExists) {
+      return res.status(400).json({ success: false, message: "machine already exist" });
+    }
+
+    await Machine.create({ machineName });
+    req.flash("notification", "Machine created successfully!");
+    res.json({ success: true, redirect: "/sachiko/form/machine" });
+  } catch (err) {
+    console.error(err);
+    const msg = err.code === 11000 ? "machine already exist" : err.message;
+    res.status(400).json({ success: false, message: msg });
+  }
+});
+
+// API: Get all machines as JSON
+router.get("/api/machines", async (req, res) => {
+  const machines = await Machine.distinct("machineName");
+  const normalizedMachines = [...new Set(
+    machines
+      .map((machine) => canonicalizeLocationName(machine))
+      .filter(Boolean)
+  )].sort();
+  res.json(normalizedMachines);
+});
+
+// DELETE: Remove a machine
+router.delete("/api/machines/:id", requireAuth, deleteLimiter, async (req, res) => {
+  try {
+    await Machine.findByIdAndDelete(req.params.id);
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -2283,81 +1847,6 @@ router.get("/pos-roll/view", async (req, res) => {
   });
 });
 
-// ================= TTR MASTER LIST VIEW =================
-router.get("/ttr/view", async (req, res) => {
-  const ttrs = await Ttr.find().sort({ ttrProductId: 1 }).lean();
-  const ttrIds = ttrs.map((t) => t._id).filter(Boolean);
-  
-  const [stockAgg, bindingAgg, vendorBindingAgg] = await Promise.all([
-    ttrIds.length
-      ? TtrStock.aggregate([
-          { $match: { ttr: { $in: ttrIds } } },
-          {
-            $group: {
-              _id: "$ttr",
-              qty: { $sum: "$quantity" },
-            },
-          },
-        ])
-      : [],
-    ttrIds.length
-      ? TtrBinding.aggregate([
-          { $match: { ttrId: { $in: ttrIds } } },
-          {
-            $group: {
-              _id: "$ttrId",
-              count: { $sum: 1 },
-            },
-          },
-        ])
-      : [],
-    ttrIds.length
-      ? VendorTtrBinding.aggregate([
-          { $match: { ttrId: { $in: ttrIds } } },
-          {
-            $group: {
-              _id: "$ttrId",
-              count: { $sum: 1 },
-            },
-          },
-        ])
-      : []
-  ]);
-
-  const stockByTtr = {};
-  stockAgg.forEach((row) => {
-    const ttrId = String(row._id || "");
-    stockByTtr[ttrId] = Number(row.qty || 0);
-  });
-
-  const bindingsByTtr = {};
-  bindingAgg.forEach((row) => {
-    const ttrId = String(row._id || "");
-    bindingsByTtr[ttrId] = Number(row.count || 0);
-  });
-
-  const vendorBindingsByTtr = {};
-  vendorBindingAgg.forEach((row) => {
-    const ttrId = String(row._id || "");
-    vendorBindingsByTtr[ttrId] = Number(row.count || 0);
-  });
-
-  ttrs.forEach((t) => {
-    const ttrId = String(t._id);
-    t.stock = stockByTtr[ttrId] ?? 0;
-    t.bindingCount = bindingsByTtr[ttrId] ?? 0;
-    t.vendorBindingCount = vendorBindingsByTtr[ttrId] ?? 0;
-  });
-
-  res.render("inventory/ttrMasterDisp.ejs", {
-    jsonData: ttrs,
-    CSS: "tableDisp.css",
-    JS: false,
-    title: "TTR View",
-    notification: req.flash("notification"),
-  });
-});
-
 // ================= TAPE PROFILE VIEW =================
 router.get("/tape/profile/:id", async (req, res) => {
   const tape = await Tape.findById(req.params.id).lean();
@@ -2374,8 +1863,8 @@ router.get("/tape/profile/:id", async (req, res) => {
 
   const primaryBinding = tapeBindings[0] || null;
   const backUrl = primaryBinding?.userId?._id
-    ? `/fairdesk/client/details/${primaryBinding.userId._id}`
-    : "/fairdesk/tape/view";
+    ? `/sachiko/client/details/${primaryBinding.userId._id}`
+    : "/sachiko/tape/view";
   const stockSummary = await getItemStockSummary("Tape", tape._id);
   const locationOptions = await Location.find().sort({ locationName: 1 }).lean();
 
@@ -2396,7 +1885,7 @@ router.get("/tape/profile/:id", async (req, res) => {
     pageTitle: "Tape Details",
     sectionTitle: "Tape Details",
     valueHeader: "Value",
-    editUrl: `/fairdesk/tape/edit/${tape._id}`,
+    editUrl: `/sachiko/tape/edit/${tape._id}`,
     editLabel: "Edit Tape",
     rows,
     tape,
@@ -2412,7 +1901,7 @@ router.get("/tape/profile/:id", async (req, res) => {
     stockEditConfig: {
       enabled: true,
       itemType: "Tape",
-      editAction: `/fairdesk/tape/profile/${tape._id}/stock/edit`,
+      editAction: `/sachiko/tape/profile/${tape._id}/stock/edit`,
       locationOptions: locationOptions.map((entry) => canonicalizeLocationName(entry.locationName)).filter(Boolean),
     },
     title: "Tape Details",
@@ -2426,7 +1915,7 @@ router.post("/tape/profile/:id/stock/edit", requireAuth, updateLimiter, async (r
   handleProfileStockEdit(req, res, {
     itemType: "Tape",
     model: Tape,
-    redirectPath: "/fairdesk/tape/profile",
+    redirectPath: "/sachiko/tape/profile",
   }));
 
 function normalizePosPart(value) {
@@ -2567,7 +2056,7 @@ router.post("/tape/edit/:id", requireAuth, updateLimiter, async (req, res) => {
 
     await Tape.findByIdAndUpdate(req.params.id, updateData, { new: true, runValidators: true });
     req.flash("notification", "Tape updated successfully!");
-    res.json({ success: true, redirect: `/fairdesk/tape/view` });
+    res.json({ success: true, redirect: `/sachiko/tape/view` });
   } catch (err) {
     console.error(err);
     if (err?.code === 11000) {
@@ -2602,8 +2091,8 @@ router.get("/pos-roll/profile/:id", async (req, res) => {
 
   const primaryBinding = posRollBindings[0] || null;
   const backUrl = primaryBinding?.userId?._id
-    ? `/fairdesk/client/details/${primaryBinding.userId._id}`
-    : "/fairdesk/pos-roll/view";
+    ? `/sachiko/client/details/${primaryBinding.userId._id}`
+    : "/sachiko/pos-roll/view";
   const stockSummary = await getItemStockSummary("POS Roll", posRoll._id);
   const locationOptions = await Location.find().sort({ locationName: 1 }).lean();
 
@@ -2623,7 +2112,7 @@ router.get("/pos-roll/profile/:id", async (req, res) => {
     pageTitle: "POS Roll Details",
     sectionTitle: "POS Roll Details",
     valueHeader: "Value",
-    editUrl: `/fairdesk/pos-roll/edit/${posRoll._id}`,
+    editUrl: `/sachiko/pos-roll/edit/${posRoll._id}`,
     editLabel: "Edit POS Roll",
     rows,
     posRoll,
@@ -2639,7 +2128,7 @@ router.get("/pos-roll/profile/:id", async (req, res) => {
     stockEditConfig: {
       enabled: true,
       itemType: "POS Roll",
-      editAction: `/fairdesk/pos-roll/profile/${posRoll._id}/stock/edit`,
+      editAction: `/sachiko/pos-roll/profile/${posRoll._id}/stock/edit`,
       locationOptions: locationOptions.map((entry) => canonicalizeLocationName(entry.locationName)).filter(Boolean),
     },
     title: "POS Roll Details",
@@ -2653,7 +2142,7 @@ router.post("/pos-roll/profile/:id/stock/edit", requireAuth, updateLimiter, asyn
   handleProfileStockEdit(req, res, {
     itemType: "POS Roll",
     model: PosRoll,
-    redirectPath: "/fairdesk/pos-roll/profile",
+    redirectPath: "/sachiko/pos-roll/profile",
   }));
 
 // ================= POS ROLL EDIT =================
@@ -2715,7 +2204,7 @@ router.post("/pos-roll/edit/:id", requireAuth, updateLimiter, async (req, res) =
 
     await PosRoll.findByIdAndUpdate(req.params.id, updateData, { new: true, runValidators: true });
     req.flash("notification", "POS Roll updated successfully!");
-    res.json({ success: true, redirect: `/fairdesk/pos-roll/view` });
+    res.json({ success: true, redirect: `/sachiko/pos-roll/view` });
   } catch (err) {
     console.error(err);
     if (err?.code === 11000) {
@@ -2750,8 +2239,8 @@ router.get("/tafeta/profile/:id", async (req, res) => {
 
   const primaryBinding = tafetaBindings[0] || null;
   const backUrl = primaryBinding?.userId?._id
-    ? `/fairdesk/client/details/${primaryBinding.userId._id}`
-    : "/fairdesk/tafeta/view";
+    ? `/sachiko/client/details/${primaryBinding.userId._id}`
+    : "/sachiko/tafeta/view";
   const stockSummary = await getItemStockSummary("Tafeta", tafeta._id);
   const locationOptions = await Location.find().sort({ locationName: 1 }).lean();
 
@@ -2773,7 +2262,7 @@ router.get("/tafeta/profile/:id", async (req, res) => {
     pageTitle: "Tafeta Details",
     sectionTitle: "Tafeta Details",
     valueHeader: "Value",
-    editUrl: `/fairdesk/tafeta/edit/${tafeta._id}`,
+    editUrl: `/sachiko/tafeta/edit/${tafeta._id}`,
     editLabel: "Edit Tafeta",
     rows,
     tafeta,
@@ -2789,7 +2278,7 @@ router.get("/tafeta/profile/:id", async (req, res) => {
     stockEditConfig: {
       enabled: true,
       itemType: "Tafeta",
-      editAction: `/fairdesk/tafeta/profile/${tafeta._id}/stock/edit`,
+      editAction: `/sachiko/tafeta/profile/${tafeta._id}/stock/edit`,
       locationOptions: locationOptions.map((entry) => canonicalizeLocationName(entry.locationName)).filter(Boolean),
     },
     title: "Tafeta Details",
@@ -2803,7 +2292,7 @@ router.post("/tafeta/profile/:id/stock/edit", requireAuth, updateLimiter, async 
   handleProfileStockEdit(req, res, {
     itemType: "Tafeta",
     model: Tafeta,
-    redirectPath: "/fairdesk/tafeta/profile",
+    redirectPath: "/sachiko/tafeta/profile",
   }));
 
 // ================= TAFETA EDIT =================
@@ -2869,7 +2358,7 @@ router.post("/tafeta/edit/:id", requireAuth, updateLimiter, async (req, res) => 
 
     await Tafeta.findByIdAndUpdate(req.params.id, updateData, { new: true, runValidators: true });
     req.flash("notification", "Tafeta updated successfully!");
-    res.json({ success: true, redirect: `/fairdesk/tafeta/view` });
+    res.json({ success: true, redirect: `/sachiko/tafeta/view` });
   } catch (err) {
     console.error(err);
     if (err?.code === 11000) {
@@ -2887,81 +2376,6 @@ router.post("/tafeta/edit/:id", requireAuth, updateLimiter, async (req, res) => 
     res.status(400).json({ success: false, message: err.message });
   }
 });
-
-// ================= TTR PROFILE VIEW =================
-router.get("/ttr/profile/:id", async (req, res) => {
-  const ttr = await Ttr.findById(req.params.id).lean();
-
-  if (!ttr) {
-    req.flash("notification", "TTR not found");
-    return res.redirect("back");
-  }
-
-  const ttrBindings = await TtrBinding.find({ ttrId: req.params.id })
-    .populate({ path: "userId", select: "userName clientName hoLocation" })
-    .sort({ createdAt: -1 })
-    .lean();
-
-  const primaryBinding = ttrBindings[0] || null;
-  const backUrl = primaryBinding?.userId?._id
-    ? `/fairdesk/client/details/${primaryBinding.userId._id}`
-    : "/fairdesk/ttr/view";
-  const stockSummary = await getTtrStockSummary(ttr._id);
-  const locationOptions = await Location.find().sort({ locationName: 1 }).lean();
-  const ttrHeading = `${primaryBinding?.clientTtrType || ttr.ttrType || "TTR"} ${ttr.ttrCoreLength ?? ""}`
-    .replace(/\s+/g, " ")
-    .trim();
-
-  const rows = [
-    { label: "Product ID", value: ttr.ttrProductId || "N/A" },
-    { label: "Client Material Code", value: primaryBinding?.ttrClientMaterialCode || "N/A" },
-    { label: "Client Type", value: primaryBinding?.clientTtrType || "N/A" },
-    { label: "Color", value: ttr.ttrColor || "N/A" },
-    { label: "Ink Face", value: ttr.ttrInkFace || "N/A" },
-    { label: "Width", value: ttr.ttrWidth ?? "N/A" },
-    { label: "Core ID", value: ttr.ttrCoreId ?? "N/A" },
-    { label: "Core Length", value: ttr.ttrCoreLength ?? "N/A" },
-    { label: "Notch", value: ttr.ttrNotch || "N/A" },
-    { label: "Winding", value: ttr.ttrWinding || "N/A" },
-    { label: "Min Stock Qty", value: ttr.ttrMinQty ?? "N/A" },
-  ];
-
-  res.render("inventory/itemView.ejs", {
-    pageTitle: ttrHeading || "TTR Details",
-    sectionTitle: "TTR Details",
-    editUrl: `/fairdesk/ttr/edit/${ttr._id}`,
-    editLabel: "Edit TTR",
-    rows,
-    valueHeader: "Fairtech",
-    ttr,
-    ttrBindings,
-    primaryBinding,
-    backUrl,
-    stockInfo: {
-      totalStock: stockSummary.totalStock,
-      locations: stockSummary.locations,
-      booked: stockSummary.totalBooked,
-      balance: stockSummary.totalBalance,
-    },
-    stockEditConfig: {
-      enabled: true,
-      itemType: "TTR",
-      editAction: `/fairdesk/ttr/profile/${ttr._id}/stock/edit`,
-      locationOptions: locationOptions.map((entry) => canonicalizeLocationName(entry.locationName)).filter(Boolean),
-    },
-    title: ttrHeading || "TTR Details",
-    CSS: false,
-    JS: false,
-    notification: req.flash("notification"),
-  });
-});
-
-router.post("/ttr/profile/:id/stock/edit", requireAuth, updateLimiter, async (req, res) =>
-  handleProfileStockEdit(req, res, {
-    itemType: "TTR",
-    model: Ttr,
-    redirectPath: "/fairdesk/ttr/profile",
-  }));
 
 // route for vendor form.
 router.get("/form/vendor", async (req, res) => {
@@ -3111,7 +2525,7 @@ router.post("/form/vendor", requireAuth, createLimiter, async (req, res) => {
         
         const othersIndex = comms.indexOf("OTHERS");
         if (othersIndex !== -1) {
-          const predefined = ["FACE PAPER", "ADHESIVE", "RELEASE PAPER", "SL (PAPER)", "PACKAGING", "TTR", "TAPE", "POS ROLL", "TAFFETA", "PRINTERS", "SCANNERS", "SPARES", "CORE", "FOIL", "IT", "DIE", "BLOCK", "COLOR", "OTHERS"];
+          const predefined = ["FACE PAPER", "ADHESIVE", "RELEASE PAPER", "SL (PAPER)", "PACKAGING", "TAPE", "POS ROLL", "TAFFETA", "PRINTERS", "SCANNERS", "SPARES", "CORE", "FOIL", "IT", "DIE", "BLOCK", "COLOR", "OTHERS"];
           const otherVal = comms.find(c => c !== "OTHERS" && !predefined.includes(c));
           if (otherVal) {
             comms = comms.filter(c => c !== "OTHERS" && c !== otherVal);
@@ -3130,7 +2544,7 @@ router.post("/form/vendor", requireAuth, createLimiter, async (req, res) => {
 
     await Vendor.create(formData);
     req.flash("notification", "Vendor created successfully!");
-    res.json({ success: true, redirect: "/fairdesk/form/vendor" });
+    res.json({ success: true, redirect: "/sachiko/form/vendor" });
   } catch (err) {
     console.error(err);
     if (err?.code === 11000) {
@@ -3158,7 +2572,7 @@ router.get("/vendor/edit/:id", async (req, res) => {
     const vendor = await Vendor.findById(req.params.id).lean();
     if (!vendor) {
       req.flash("notification", "Vendor not found");
-      return res.redirect("/fairdesk/vendor/view");
+      return res.redirect("/sachiko/vendor/view");
     }
 
     res.render("users/vendorEditForm.ejs", {
@@ -3171,7 +2585,7 @@ router.get("/vendor/edit/:id", async (req, res) => {
   } catch (err) {
     console.error("VENDOR EDIT GET ERROR:", err);
     req.flash("notification", "Failed to load vendor edit page");
-    res.redirect("/fairdesk/vendor/view");
+    res.redirect("/sachiko/vendor/view");
   }
 });
 
@@ -3220,7 +2634,7 @@ router.post("/vendor/edit/:id", requireAuth, updateLimiter, async (req, res) => 
         
         const othersIndex = comms.indexOf("OTHERS");
         if (othersIndex !== -1) {
-          const predefined = ["FACE PAPER", "ADHESIVE", "RELEASE PAPER", "SL (PAPER)", "PACKAGING", "TTR", "TAPE", "POS ROLL", "TAFFETA", "PRINTERS", "SCANNERS", "SPARES", "CORE", "FOIL", "IT", "DIE", "BLOCK", "COLOR", "OTHERS"];
+          const predefined = ["FACE PAPER", "ADHESIVE", "RELEASE PAPER", "SL (PAPER)", "PACKAGING", "TAPE", "POS ROLL", "TAFFETA", "PRINTERS", "SCANNERS", "SPARES", "CORE", "FOIL", "IT", "DIE", "BLOCK", "COLOR", "OTHERS"];
           const otherVal = comms.find(c => c !== "OTHERS" && !predefined.includes(c));
           if (otherVal) {
             comms = comms.filter(c => c !== "OTHERS" && c !== otherVal);
@@ -3267,7 +2681,7 @@ router.post("/vendor/edit/:id", requireAuth, updateLimiter, async (req, res) => 
     }
 
     req.flash("notification", "Vendor updated successfully!");
-    res.json({ success: true, redirect: "/fairdesk/vendor/view" });
+    res.json({ success: true, redirect: "/sachiko/vendor/view" });
   } catch (err) {
     console.error("VENDOR EDIT POST ERROR:", err);
     if (err?.code === 11000) {
@@ -3351,7 +2765,7 @@ router.post("/form/vendor-user", requireAuth, createLimiter, async (req, res) =>
     await Vendor.updateOne({ _id: vendor._id }, { $push: { users: newUser._id } });
 
     req.flash("notification", "Vendor user created successfully!");
-    res.json({ success: true, redirect: "/fairdesk/form/vendor?tab=user" });
+    res.json({ success: true, redirect: "/sachiko/form/vendor?tab=user" });
   } catch (err) {
     console.error(err);
     if (err?.code === 11000) {
@@ -3364,93 +2778,87 @@ router.post("/form/vendor-user", requireAuth, createLimiter, async (req, res) =>
   }
 });
 
-// ================= TTR EDIT =================
-router.get("/ttr/edit/:id", async (req, res) => {
-  const ttr = await Ttr.findById(req.params.id).lean();
-  if (!ttr) return res.redirect("back");
+// ----------------------------------Sales Order---------------------------------->
+// Centralized Sales Order Form
+// Sachiko datasheet-based Sales Order (create) form + submission.
+async function previewSachikoSalesOrderId() {
+  const counter = await Counter.findOne({ key: "sachikoSalesOrderId" }).select("seq").lean();
+  const nextSeq = Number(counter?.seq || 0) + 1;
+  return `SP | SO | ${String(nextSeq).padStart(6, "0")}`;
+}
 
-  res.render("inventory/ttrEdit.ejs", {
-    title: "Edit TTR",
+async function generateSachikoSalesOrderId() {
+  const counter = await Counter.findOneAndUpdate(
+    { key: "sachikoSalesOrderId" },
+    { $inc: { seq: 1 } },
+    { new: true, upsert: true, setDefaultsOnInsert: true },
+  ).lean();
+  return `SP | SO | ${String(counter.seq).padStart(6, "0")}`;
+}
+
+router.get("/sales/order", async (req, res) => {
+  const [clients, clientUsers, datasheets] = await Promise.all([
+    Client.find().select("clientId clientName").sort({ clientName: 1 }).lean(),
+    Username.find().select("clientId userName").lean(),
+    SachikoDatasheet.find().sort({ productCode: 1 }).lean(),
+  ]);
+  const previewSalesOrderId = await previewSachikoSalesOrderId();
+  res.render("sachiko/salesOrderForm.ejs", {
+    title: "Sales Order",
     CSS: false,
     JS: false,
-    ttr,
+    clients,
+    clientUsers,
+    datasheets,
+    previewSalesOrderId,
+    notification: req.flash("notification"),
   });
 });
 
-router.post("/ttr/edit/:id", requireAuth, updateLimiter, async (req, res) => {
+router.post("/sales/order", requireAuth, createLimiter, async (req, res) => {
   try {
-    const widthRaw = req.body.ttrWidth;
-    const widthTrim = typeof widthRaw === "string" ? widthRaw.trim() : widthRaw;
-    const widthNum = typeof widthTrim === "string" ? Number(widthTrim) : Number(widthTrim);
-    const widthVal =
-      typeof widthTrim === "string" && widthTrim !== "" && !Number.isNaN(widthNum) ? widthNum : widthTrim;
-    const ttrCoreId = normalizeTtrCoreId(req.body.ttrCoreId);
+    const b = req.body;
+    const trim = (value) => String(value ?? "").trim();
+    const salesOrderId = await generateSachikoSalesOrderId();
 
-    const updateData = {
-      ttrType: String(req.body.ttrType || "").trim(),
-      ttrColor: String(req.body.ttrColor || "").trim(),
-      ttrMaterialCode: String(req.body.ttrMaterialCode || "").trim(),
-      ttrWidth: widthVal,
-      ttrMtrs: Number(req.body.ttrMtrs),
-      ttrInkFace: "OUT",
-      ttrCoreId,
-      ttrCoreLength: Number(req.body.ttrCoreLength),
-      ttrNotch: String(req.body.ttrNotch || "").trim(),
-      ttrWinding: String(req.body.ttrWinding || "").trim(),
-    };
-    updateData.ttrSignature = hashSignature(buildTtrSignature(updateData));
+    await SachikoSalesOrder.create({
+      salesOrderId,
+      date: b.date ? new Date(b.date) : new Date(),
+      clientName: trim(b.clientName),
+      clientUserName: trim(b.clientUserName),
+      productCode: trim(b.productCode),
+      deckleType: trim(b.deckleType),
+      faceStock: {
+        code: trim(b.fsCode),
+        gsmMic: trim(b.fsGsmMic),
+        size: trim(b.fsSize),
+        rollDrumNo: trim(b.fsRollDrumNo),
+      },
+      adhesive: {
+        code: trim(b.adCode),
+        gsmMic: trim(b.adGsmMic),
+        size: trim(b.adSize),
+        rollDrumNo: trim(b.adRollDrumNo),
+      },
+      releaseLiner: {
+        code: trim(b.rlCode),
+        gsmMic: trim(b.rlGsmMic),
+        size: trim(b.rlSize),
+        rollDrumNo: trim(b.rlRollDrumNo),
+      },
+    });
 
-    const duplicateTtrQuery = {
-      _id: { $ne: req.params.id },
-      $or: [
-        { ttrSignature: updateData.ttrSignature },
-        {
-          ttrType: flexTtrValue(updateData.ttrType),
-          ttrColor: flexTtrValue(updateData.ttrColor),
-          ttrMaterialCode: flexTtrValue(updateData.ttrMaterialCode),
-          ttrWidth: flexTtrValue(updateData.ttrWidth),
-          ttrMtrs: updateData.ttrMtrs,
-          ttrInkFace: flexTtrValue(updateData.ttrInkFace),
-          ttrCoreId: flexTtrValue(updateData.ttrCoreId),
-          ttrCoreLength: updateData.ttrCoreLength,
-          ttrNotch: flexTtrValue(updateData.ttrNotch),
-          ttrWinding: flexTtrValue(updateData.ttrWinding),
-        },
-      ],
-    };
-
-    const duplicateTtr = await Ttr.findOne(duplicateTtrQuery).select("ttrProductId").lean();
-    if (duplicateTtr) {
-      return res.status(400).json({
-        success: false,
-        message: duplicateMasterMessage("TTR", duplicateTtr.ttrProductId),
-      });
-    }
-
-    await Ttr.findByIdAndUpdate(req.params.id, updateData, { new: true, runValidators: true });
-    req.flash("notification", "TTR updated successfully!");
-    res.json({ success: true, redirect: `/fairdesk/ttr/view` });
+    req.flash("notification", "Sales order created successfully!");
+    res.redirect("/sachiko/sales/order");
   } catch (err) {
-    console.error(err);
-    if (err?.code === 11000) {
-      const duplicateTtr = await Ttr.findOne({
-        _id: { $ne: req.params.id },
-        ttrSignature: hashSignature(buildTtrSignature(req.body)),
-      })
-        .select("ttrProductId")
-        .lean();
-      return res.status(409).json({
-        success: false,
-        message: duplicateMasterMessage("TTR", duplicateTtr?.ttrProductId),
-      });
-    }
-    res.status(400).json({ success: false, message: err.message });
+    console.error("SACHIKO SALES ORDER CREATE ERROR:", err);
+    req.flash("notification", "Failed to create sales order");
+    res.redirect("/sachiko/sales/order");
   }
 });
 
-// ----------------------------------Sales Order---------------------------------->
-// Centralized Sales Order Form
-router.get("/sales/order", async (req, res) => {
+// Legacy tape/POS/tafeta sales-order create form (preserved; replaced at /sales/order by the datasheet form above).
+router.get("/tape-sales/order", async (req, res) => {
   const { orderId } = req.query;
   const clientsPromise = Client.distinct("clientName");
   const locationsPromise = Location.distinct("locationName");
@@ -3507,7 +2915,6 @@ router.get("/sales/clients/:itemType", async (req, res) => {
     if (itemType === "TAPE") bindingModel = TapeBinding;
     else if (itemType === "POS_ROLL") bindingModel = PosRollBinding;
     else if (itemType === "TAFETA") bindingModel = TafetaBinding;
-    else if (itemType === "TTR") bindingModel = TtrBinding;
     else {
       const clients = await Client.distinct("clientName");
       return res.json(clients.sort());
@@ -3541,10 +2948,6 @@ router.get("/sales/items/:type/:userId", async (req, res) => {
       .populate({
         path: "tafeta",
         populate: { path: "tafetaId" },
-      })
-      .populate({
-        path: "ttr",
-        populate: { path: "ttrId" },
       })
       .populate({
         path: 'label',
@@ -3670,44 +3073,6 @@ router.get("/sales/items/:type/:userId", async (req, res) => {
           };
         }),
       );
-    } else if (type === "TTR") {
-      const bindings = user.ttr || [];
-      items = await Promise.all(
-        bindings.map(async (binding) => {
-          if (!binding.ttrId) return null;
-          const stockInfo = await getItemStockSummary("TTR", binding.ttrId._id);
-          const t = binding.ttrId;
-          return {
-            _id: binding._id,
-            displayName: `${t.ttrType || ""} ${t.ttrWidth || ""}mm x ${t.ttrMtrs || ""}m`,
-            minOrderQty: binding.ttrMinQty || 0,
-            rate: binding.ttrRatePerRoll || 0,
-            stock: stockInfo,
-            details: {
-              type: "TTR",
-              productId: t.ttrProductId || "",
-              ttrType: t.ttrType || "",
-              color: t.ttrColor || "",
-              materialCode: t.ttrMaterialCode || "",
-              width: t.ttrWidth || "",
-              mtrs: t.ttrMtrs || "",
-              inkFace: t.ttrInkFace || "",
-              coreId: t.ttrCoreId || "",
-              coreLength: t.ttrCoreLength || "",
-              notch: t.ttrNotch || "",
-              winding: t.ttrWinding || "",
-              clientMaterialCode: binding.ttrClientMaterialCode || "",
-              clientType: binding.clientTtrType || "",
-              deliveredMtrs: binding.ttrMtrsDel || "",
-              saleCost: binding.ttrSaleCost || 0,
-              minQty: t.ttrMinQty || 0,
-              orderQty: binding.ttrOdrQty || 0,
-              orderFreq: binding.ttrOdrFreq || "",
-              creditTerm: binding.ttrCreditTerm || "",
-            },
-          };
-        }),
-      );
     } else if (type === "LABEL") {
       items = (user.label || []).map((lbl) => ({
         _id: lbl._id,
@@ -3732,17 +3097,17 @@ router.get("/sales/items/:type/:userId", async (req, res) => {
   }
 });
 
-// Submit Sales Order (Create or Update)
-router.post("/sales/order", async (req, res) => {
+// Submit Sales Order (Create or Update) — legacy tape/POS/tafeta flow.
+router.post("/tape-sales/order", async (req, res) => {
   try {
     const { orderId, itemType, userId, itemId, quantity, estimatedDate, remarks, sourceLocation, locationRadio, userLocation, poNumber, orderRate, submissionToken } = req.body;
     const createdByUser = req.user?.username || "SYSTEM";
 
-    if (["TAPE", "POS_ROLL", "TAFETA", "TTR"].includes(itemType) && canonicalizeLocationName(locationRadio) === "ALL") {
+    if (["TAPE", "POS_ROLL", "TAFETA"].includes(itemType) && canonicalizeLocationName(locationRadio) === "ALL") {
       return res.status(400).json({ success: false, message: "Location cannot be ALL. Please select a specific location." });
     }
     let normalizedSourceLocation = canonicalizeLocationName(sourceLocation || locationRadio || userLocation);
-    const isStockBasedType = ["TAPE", "POS_ROLL", "TAFETA", "TTR"].includes(itemType);
+    const isStockBasedType = ["TAPE", "POS_ROLL", "TAFETA"].includes(itemType);
 
     // "ALL" is not a valid storage location for stock-based orders.
     if (normalizedSourceLocation === "ALL") normalizedSourceLocation = "";
@@ -3765,9 +3130,6 @@ router.post("/sales/order", async (req, res) => {
         bindingUserId = binding?.userId || null;
       } else if (itemType === "TAFETA") {
         const binding = await TafetaBinding.findById(itemId).select("userId").lean();
-        bindingUserId = binding?.userId || null;
-      } else if (itemType === "TTR") {
-        const binding = await TtrBinding.findById(itemId).select("userId").lean();
         bindingUserId = binding?.userId || null;
       }
 
@@ -3810,7 +3172,7 @@ router.post("/sales/order", async (req, res) => {
         // UPDATE existing order
         await TapeSalesOrder.findByIdAndUpdate(orderId, data);
         req.flash("notification", "Sales order updated successfully!");
-        res.json({ success: true, redirect: "/fairdesk/sales/pending" });
+        res.json({ success: true, redirect: "/sachiko/sales/pending" });
       } else {
         // CREATE new order
         data.createdBy = createdByUser;
@@ -3828,7 +3190,7 @@ router.post("/sales/order", async (req, res) => {
         data.submissionToken = String(submissionToken || "").trim() || undefined;
         const existingOrder = await TapeSalesOrder.findOne({ orderSignature: data.orderSignature }).select("_id").lean();
         if (existingOrder) {
-          return res.json({ success: true, redirect: "/fairdesk/sales/pending", duplicate: true });
+          return res.json({ success: true, redirect: "/sachiko/sales/pending", duplicate: true });
         }
         const newOrder = await TapeSalesOrder.create(data);
 
@@ -3843,7 +3205,7 @@ router.post("/sales/order", async (req, res) => {
         req.flash("notification", "Sales order created successfully!");
 
         // Redirect to pending orders
-        res.json({ success: true, redirect: "/fairdesk/sales/pending" });
+        res.json({ success: true, redirect: "/sachiko/sales/pending" });
       }
     } else if (itemType === "POS_ROLL") {
       const binding = await PosRollBinding.findById(itemId);
@@ -3871,7 +3233,7 @@ router.post("/sales/order", async (req, res) => {
       if (orderId) {
         await TapeSalesOrder.findByIdAndUpdate(orderId, data);
         req.flash("notification", "POS Roll order updated successfully!");
-        res.json({ success: true, redirect: "/fairdesk/sales/pending" });
+        res.json({ success: true, redirect: "/sachiko/sales/pending" });
       } else {
         data.createdBy = createdByUser;
         data.orderSignature = buildSalesOrderSignature({
@@ -3888,7 +3250,7 @@ router.post("/sales/order", async (req, res) => {
         data.submissionToken = String(submissionToken || "").trim() || undefined;
         const existingOrder = await TapeSalesOrder.findOne({ orderSignature: data.orderSignature }).select("_id").lean();
         if (existingOrder) {
-          return res.json({ success: true, redirect: "/fairdesk/sales/pending", duplicate: true });
+          return res.json({ success: true, redirect: "/sachiko/sales/pending", duplicate: true });
         }
         const newOrder = await TapeSalesOrder.create(data);
         await SalesOrderLog.create({
@@ -3898,7 +3260,7 @@ router.post("/sales/order", async (req, res) => {
           performedBy: createdByUser,
         });
         req.flash("notification", "POS Roll order created successfully!");
-        res.json({ success: true, redirect: "/fairdesk/sales/pending" });
+        res.json({ success: true, redirect: "/sachiko/sales/pending" });
       }
     } else if (itemType === "TAFETA") {
       const binding = await TafetaBinding.findById(itemId);
@@ -3926,7 +3288,7 @@ router.post("/sales/order", async (req, res) => {
       if (orderId) {
         await TapeSalesOrder.findByIdAndUpdate(orderId, data);
         req.flash("notification", "Tafeta order updated successfully!");
-        res.json({ success: true, redirect: "/fairdesk/sales/pending" });
+        res.json({ success: true, redirect: "/sachiko/sales/pending" });
       } else {
         data.createdBy = createdByUser;
         data.orderSignature = buildSalesOrderSignature({
@@ -3943,7 +3305,7 @@ router.post("/sales/order", async (req, res) => {
         data.submissionToken = String(submissionToken || "").trim() || undefined;
         const existingOrder = await TapeSalesOrder.findOne({ orderSignature: data.orderSignature }).select("_id").lean();
         if (existingOrder) {
-          return res.json({ success: true, redirect: "/fairdesk/sales/pending", duplicate: true });
+          return res.json({ success: true, redirect: "/sachiko/sales/pending", duplicate: true });
         }
         const newOrder = await TapeSalesOrder.create(data);
         await SalesOrderLog.create({
@@ -3953,62 +3315,7 @@ router.post("/sales/order", async (req, res) => {
           performedBy: createdByUser,
         });
         req.flash("notification", "Tafeta order created successfully!");
-        res.json({ success: true, redirect: "/fairdesk/sales/pending" });
-      }
-    } else if (itemType === "TTR") {
-      const binding = await TtrBinding.findById(itemId);
-      if (!binding) {
-        return res.status(400).json({ success: false, message: "Invalid TTR item selected" });
-      }
-      const parsedOrderRate = Number(orderRate);
-      const finalOrderRate = Number.isFinite(parsedOrderRate) ? parsedOrderRate : Number(binding.ttrRatePerRoll) || 0;
-
-      const data = {
-        tapeBinding: itemId,
-        onBindingModel: "TtrBinding",
-        userId: binding.userId,
-        tapeId: binding.ttrId,
-        onModel: "Ttr",
-        sourceLocation: sourceLocationForSave,
-        poNumber,
-        orderRate: finalOrderRate,
-        quantity: Number(quantity),
-        estimatedDate: new Date(estimatedDate),
-        remarks,
-        status: "PENDING",
-      };
-
-      if (orderId) {
-        await TapeSalesOrder.findByIdAndUpdate(orderId, data);
-        req.flash("notification", "TTR order updated successfully!");
-        res.json({ success: true, redirect: "/fairdesk/sales/pending" });
-      } else {
-        data.createdBy = createdByUser;
-        data.orderSignature = buildSalesOrderSignature({
-          itemType,
-          itemId,
-          userId: binding.userId,
-          quantity: data.quantity,
-          estimatedDate,
-          poNumber,
-          sourceLocation: sourceLocationForSave,
-          orderRate: finalOrderRate,
-          createdBy: createdByUser,
-        });
-        data.submissionToken = String(submissionToken || "").trim() || undefined;
-        const existingOrder = await TapeSalesOrder.findOne({ orderSignature: data.orderSignature }).select("_id").lean();
-        if (existingOrder) {
-          return res.json({ success: true, redirect: "/fairdesk/sales/pending", duplicate: true });
-        }
-        const newOrder = await TapeSalesOrder.create(data);
-        await SalesOrderLog.create({
-          orderId: newOrder._id,
-          action: "CREATED",
-          quantity: Number(quantity),
-          performedBy: createdByUser,
-        });
-        req.flash("notification", "TTR order created successfully!");
-        res.json({ success: true, redirect: "/fairdesk/sales/pending" });
+        res.json({ success: true, redirect: "/sachiko/sales/pending" });
       }
     } else {
       return res.status(400).json({ success: false, message: "Unsupported item type" });
@@ -4027,7 +3334,7 @@ router.post("/sales/order", async (req, res) => {
         String(err?.message || "").includes("orderSignature"));
 
     if (duplicateSubmissionToken) {
-      return res.json({ success: true, redirect: "/fairdesk/sales/pending", duplicate: true });
+      return res.json({ success: true, redirect: "/sachiko/sales/pending", duplicate: true });
     }
     const sourceLocError = err?.errors?.sourceLocation;
     if (sourceLocError) {
@@ -4048,12 +3355,12 @@ router.get("/sales/pending", async (req, res) => {
       .populate({
         path: "tapeId",
         select:
-          "tapeProductId tapePaperCode tapeGsm tapeFinish posProductId posPaperCode posGsm tafetaProductId tafetaMaterialCode tafetaGsm ttrProductId ttrType ttrWidth ttrMtrs labelWidth labelHeight",
+          "tapeProductId tapePaperCode tapeGsm tapeFinish posProductId posPaperCode posGsm tafetaProductId tafetaMaterialCode tafetaGsm labelWidth labelHeight",
       })
       .populate({
         path: "tapeBinding",
         select:
-          "tapeRatePerRoll tapeOdrQty tapeMinQty posRatePerRoll posOdrQty posMinQty tafetaRatePerRoll tafetaOdrQty tafetaMinQty ttrRatePerRoll ttrOdrQty ttrMinQty",
+          "tapeRatePerRoll tapeOdrQty tapeMinQty posRatePerRoll posOdrQty posMinQty tafetaRatePerRoll tafetaOdrQty tafetaMinQty",
       })
       .sort({ createdAt: -1 })
       .lean();
@@ -4063,7 +3370,6 @@ router.get("/sales/pending", async (req, res) => {
       Tape: new Set(),
       PosRoll: new Set(),
       Tafeta: new Set(),
-      Ttr: new Set(),
       Label: new Set()
     };
 
@@ -4088,19 +3394,14 @@ router.get("/sales/pending", async (req, res) => {
       TafetaStock.aggregate([
         { $match: { tafeta: { $in: Array.from(itemIdsByModel.Tafeta).map(id => new mongoose.Types.ObjectId(id)) } } },
         { $group: { _id: "$tafeta", total: { $sum: "$quantity" } } }
-      ]),
-      TtrStock.aggregate([
-        { $match: { ttr: { $in: Array.from(itemIdsByModel.Ttr).map(id => new mongoose.Types.ObjectId(id)) } } },
-        { $group: { _id: "$ttr", total: { $sum: "$quantity" } } }
       ])
     ];
 
-    const [tapeStocks, posStocks, tafetaStocks, ttrStocks] = await Promise.all(stockPromises);
+    const [tapeStocks, posStocks, tafetaStocks] = await Promise.all(stockPromises);
 
     tapeStocks.forEach(s => stockMap[`Tape:${s._id}`] = s.total);
     posStocks.forEach(s => stockMap[`PosRoll:${s._id}`] = s.total);
     tafetaStocks.forEach(s => stockMap[`Tafeta:${s._id}`] = s.total);
-    ttrStocks.forEach(s => stockMap[`Ttr:${s._id}`] = s.total);
 
     // Fetch active Purchase Orders for these items
     const allItemIds = Object.values(itemIdsByModel).flatMap(set => Array.from(set)).map(id => new mongoose.Types.ObjectId(id));
@@ -4144,7 +3445,7 @@ router.get("/purchase/pending", async (req, res) => {
       .populate({
         path: "itemId",
         select:
-          "tapeProductId tapePaperCode tapeGsm posProductId posPaperCode posGsm tafetaProductId tafetaMaterialCode tafetaGsm ttrProductId ttrType ttrWidth ttrMtrs",
+          "tapeProductId tapePaperCode tapeGsm posProductId posPaperCode posGsm tafetaProductId tafetaMaterialCode tafetaGsm",
       })
       .sort({ createdAt: -1 })
       .lean();
@@ -4173,7 +3474,6 @@ function getItemName(item, type) {
   if (type === "Tape") return `${item.tapePaperCode || ""} ${item.tapeGsm || ""}gsm`.trim() || item.tapeProductId;
   if (type === "PosRoll" || type === "Pos-Roll") return `${item.posPaperCode || ""} ${item.posGsm || ""}gsm`.trim() || item.posProductId;
   if (type === "Tafeta") return `${item.tafetaMaterialCode || ""} ${item.tafetaGsm || ""}gsm`.trim() || item.tafetaProductId;
-  if (type === "Ttr") return `${item.ttrType || ""} ${item.ttrWidth || ""}x${item.ttrMtrs || ""}`.trim() || item.ttrProductId;
   return "N/A";
 }
 
@@ -4182,7 +3482,7 @@ router.get("/purchase/receive", async (req, res) => {
     const { orderId } = req.query;
     if (!orderId) {
       req.flash("notification", "No order ID provided.");
-      return res.redirect("/fairdesk/purchase/pending");
+      return res.redirect("/sachiko/purchase/pending");
     }
 
     const order = await PurchaseOrder.findById(orderId)
@@ -4192,7 +3492,7 @@ router.get("/purchase/receive", async (req, res) => {
 
     if (!order) {
       req.flash("notification", "Purchase Order not found.");
-      return res.redirect("/fairdesk/purchase/pending");
+      return res.redirect("/sachiko/purchase/pending");
     }
 
     const [logs, locations] = await Promise.all([
@@ -4225,12 +3525,12 @@ router.post("/purchase/receive", async (req, res) => {
     const po = await PurchaseOrder.findById(orderId).populate("itemId");
     if (!po) {
       req.flash("notification", "Purchase Order not found.");
-      return res.redirect("/fairdesk/purchase/pending");
+      return res.redirect("/sachiko/purchase/pending");
     }
 
     if (po.status === "RECEIVED") {
       req.flash("notification", "This order has already been received.");
-      return res.redirect("/fairdesk/purchase/pending");
+      return res.redirect("/sachiko/purchase/pending");
     }
 
     const qty = Number(receivedQuantity) || po.quantity;
@@ -4254,13 +3554,6 @@ router.post("/purchase/receive", async (req, res) => {
     } else if (po.onModel === "Tafeta") {
       await TafetaStock.create({
         tafeta: po.itemId._id,
-        location,
-        quantity: qty,
-        remarks: remarks || `From PO: ${po.poNumber}`
-      });
-    } else if (po.onModel === "Ttr") {
-      await TtrStock.create({
-        ttr: po.itemId._id,
         location,
         quantity: qty,
         remarks: remarks || `From PO: ${po.poNumber}`
@@ -4292,7 +3585,7 @@ router.post("/purchase/receive", async (req, res) => {
     });
 
     req.flash("notification", "Purchase Order received and stock updated successfully.");
-    res.redirect("/fairdesk/purchase/pending");
+    res.redirect("/sachiko/purchase/pending");
   } catch (err) {
     console.error("RECEIVE PO POST ERROR:", err);
     req.flash("notification", "Error processing receipt: " + err.message);
@@ -4306,7 +3599,7 @@ router.get("/sales/order/confirm", async (req, res) => {
     const { orderId } = req.query;
     if (!orderId) {
       req.flash("notification", "No order specified");
-      return res.redirect("/fairdesk/sales/pending");
+      return res.redirect("/sachiko/sales/pending");
     }
 
     const order = await TapeSalesOrder.findById(orderId)
@@ -4314,18 +3607,18 @@ router.get("/sales/order/confirm", async (req, res) => {
       .populate({
         path: "tapeId",
         select:
-          "tapeProductId tapePaperCode tapeGsm tapeFinish tapePaperType tapeAdhesiveGsm tapeWidth tapeMtrs tapeCoreId posProductId posPaperCode posGsm posPaperType posColor posWidth posCoreId posMtrs tafetaProductId tafetaMaterialCode tafetaGsm tafetaMaterialType tafetaColor tafetaWidth tafetaMtrs tafetaCoreLen tafetaCoreId tafetaNotch ttrProductId ttrType ttrColor ttrMaterialCode ttrWidth ttrMtrs ttrInkFace ttrCoreId ttrCoreLength ttrNotch ttrWinding labelWidth labelHeight",
+          "tapeProductId tapePaperCode tapeGsm tapeFinish tapePaperType tapeAdhesiveGsm tapeWidth tapeMtrs tapeCoreId posProductId posPaperCode posGsm posPaperType posColor posWidth posCoreId posMtrs tafetaProductId tafetaMaterialCode tafetaGsm tafetaMaterialType tafetaColor tafetaWidth tafetaMtrs tafetaCoreLen tafetaCoreId tafetaNotch labelWidth labelHeight",
       })
       .populate({
         path: "tapeBinding",
         select:
-          "tapeRatePerRoll tapeOdrQty tapeMinQty tapeClientMaterialCode clientTapeGsm posRatePerRoll posOdrQty posMinQty posClientMaterialCode clientPosGsm tafetaRatePerRoll tafetaOdrQty tafetaMinQty tafetaClientMaterialCode clientTafetaGsm ttrRatePerRoll ttrOdrQty ttrMinQty ttrClientMaterialCode clientTtrType",
+          "tapeRatePerRoll tapeOdrQty tapeMinQty tapeClientMaterialCode clientTapeGsm posRatePerRoll posOdrQty posMinQty posClientMaterialCode clientPosGsm tafetaRatePerRoll tafetaOdrQty tafetaMinQty tafetaClientMaterialCode clientTafetaGsm",
       })
       .lean();
 
     if (!order) {
       req.flash("notification", "Order not found");
-      return res.redirect("/fairdesk/sales/pending");
+      return res.redirect("/sachiko/sales/pending");
     }
 
     const logs = await SalesOrderLog.find({ orderId, action: "DELIVERED" }).sort({ performedAt: -1 }).lean();
@@ -4358,7 +3651,7 @@ router.get("/sales/order/confirm", async (req, res) => {
   } catch (err) {
     console.error("CONFIRM ORDER PAGE ERROR:", err);
     req.flash("notification", "Failed to load confirm page");
-    res.redirect("/fairdesk/sales/pending");
+    res.redirect("/sachiko/sales/pending");
   }
 });
 
@@ -4373,7 +3666,7 @@ router.get("/sales/order/logs", async (req, res) => {
           {
             path: "tapeId",
             select:
-              "tapeProductId tapePaperCode tapeGsm tapeFinish posProductId posPaperCode posGsm tafetaProductId tafetaMaterialCode tafetaGsm ttrProductId ttrColor ttrType ttrWidth ttrMtrs labelWidth labelHeight",
+              "tapeProductId tapePaperCode tapeGsm tapeFinish posProductId posPaperCode posGsm tafetaProductId tafetaMaterialCode tafetaGsm labelWidth labelHeight",
           },
         ],
       })
@@ -4390,7 +3683,7 @@ router.get("/sales/order/logs", async (req, res) => {
   } catch (err) {
     console.error("ORDER LOGS ERROR:", err);
     req.flash("notification", "Failed to load logs");
-    res.redirect("/fairdesk/sales/pending");
+    res.redirect("/sachiko/sales/pending");
   }
 });
 
@@ -4423,10 +3716,6 @@ router.put("/purchase/log/:logId", requireAuth, updateLimiter, async (req, res) 
       StockModel = TafetaStock;
       StockLogModel = TafetaStockLog;
       matchField = "tafeta";
-    } else if (po.onModel === "Ttr") {
-      StockModel = TtrStock;
-      StockLogModel = TtrStockLog;
-      matchField = "ttr";
     }
 
     if (location && po.itemId && qtyDiff !== 0) {
@@ -4539,10 +3828,6 @@ router.delete("/purchase/log/:logId", requireAuth, deleteLimiter, async (req, re
       StockModel = TafetaStock;
       StockLogModel = TafetaStockLog;
       matchField = "tafeta";
-    } else if (po.onModel === "Ttr") {
-      StockModel = TtrStock;
-      StockLogModel = TtrStockLog;
-      matchField = "ttr";
     }
 
     if (location && po.itemId && qtyToRemove > 0) {
@@ -4609,7 +3894,7 @@ router.get("/purchase/order/logs", async (req, res) => {
           {
             path: "itemId",
             select:
-              "tapeProductId tapePaperCode tapeGsm posProductId posPaperCode posGsm tafetaProductId tafetaMaterialCode tafetaGsm ttrProductId ttrType ttrWidth ttrMtrs",
+              "tapeProductId tapePaperCode tapeGsm posProductId posPaperCode posGsm tafetaProductId tafetaMaterialCode tafetaGsm",
           },
         ],
       })
@@ -4626,7 +3911,7 @@ router.get("/purchase/order/logs", async (req, res) => {
   } catch (err) {
     console.error("PURCHASE LOGS ERROR:", err);
     req.flash("notification", "Failed to load purchase logs");
-    res.redirect("/fairdesk/purchase/pending");
+    res.redirect("/sachiko/purchase/pending");
   }
 });
 
@@ -4636,7 +3921,7 @@ router.post("/sales/order/status", requireAuth, updateLimiter, async (req, res) 
     const accepts = req.headers.accept || "";
     const wantsJson = req.xhr || accepts.includes("application/json") || accepts.includes("text/json");
     const { orderId, status, cancelReason, invoiceNumber, confirmDate, confirmQuantity, poNumber, sourceLocation } = req.body;
-    const confirmRedirectUrl = orderId ? `/fairdesk/sales/order/confirm?orderId=${encodeURIComponent(orderId)}` : "/fairdesk/sales/pending";
+    const confirmRedirectUrl = orderId ? `/sachiko/sales/order/confirm?orderId=${encodeURIComponent(orderId)}` : "/sachiko/sales/pending";
     const order = await TapeSalesOrder.findById(orderId)
       .populate({ path: "tapeId", select: "tapeFinish tapePaperCode tapeGsm" })
       .lean();
@@ -4689,10 +3974,6 @@ router.post("/sales/order/status", requireAuth, updateLimiter, async (req, res) 
         StockModel = TafetaStock;
         StockLogModel = TafetaStockLog;
         matchField = "tafeta";
-      } else if (order.onModel === "Ttr") {
-        StockModel = TtrStock;
-        StockLogModel = TtrStockLog;
-        matchField = "ttr";
       }
 
       if (!location) {
@@ -4852,10 +4133,6 @@ router.post("/sales/order/status", requireAuth, updateLimiter, async (req, res) 
         StockModel = TafetaStock;
         StockLogModel = TafetaStockLog;
         matchField = "tafeta";
-      } else if (order.onModel === "Ttr") {
-        StockModel = TtrStock;
-        StockLogModel = TtrStockLog;
-        matchField = "ttr";
       }
 
       const qty = order.quantity; // TODO: Should this be dispatchedQuantity? For now assume cancelling full order if it was fully confirmed. Or partial?
@@ -4936,9 +4213,9 @@ router.post("/sales/order/status", requireAuth, updateLimiter, async (req, res) 
       req.flash("notification", `Order status updated to ${finalStatus}`);
     }
     if (wantsJson) {
-      res.json({ success: true, redirect: "/fairdesk/sales/pending" });
+      res.json({ success: true, redirect: "/sachiko/sales/pending" });
     } else {
-      res.redirect("/fairdesk/sales/pending");
+      res.redirect("/sachiko/sales/pending");
     }
   } catch (err) {
     console.error("STATUS UPDATE ERROR:", err);
@@ -4983,10 +4260,6 @@ router.put("/sales/order/log/:logId", requireAuth, updateLimiter, async (req, re
       StockModel = TafetaStock;
       StockLogModel = TafetaStockLog;
       matchField = "tafeta";
-    } else if (order.onModel === "Ttr") {
-      StockModel = TtrStock;
-      StockLogModel = TtrStockLog;
-      matchField = "ttr";
     }
 
     if (location && tape && qtyDiff !== 0) {
@@ -5118,10 +4391,6 @@ router.delete("/sales/order/log/:logId", requireAuth, deleteLimiter, async (req,
       StockModel = TafetaStock;
       StockLogModel = TafetaStockLog;
       matchField = "tafeta";
-    } else if (order.onModel === "Ttr") {
-      StockModel = TtrStock;
-      StockLogModel = TtrStockLog;
-      matchField = "ttr";
     }
 
     // Reverse stock deduction (add stock back)
@@ -5178,7 +4447,7 @@ router.delete("/sales/order/log/:logId", requireAuth, deleteLimiter, async (req,
 
 // Legacy route redirect
 router.get("/form/salesorder", (req, res) => {
-  res.redirect("/fairdesk/sales/order");
+  res.redirect("/sachiko/sales/order");
 });
 
 // ----------------------------------Sales Calculator---------------------------------->
@@ -5252,7 +4521,7 @@ router.post("/form/block", requireAuth, createLimiter, async (req, res) => {
     let formData = req.body;
     await Block.create(formData);
     req.flash("notification", "Block created successfully!");
-    res.json({ success: true, redirect: "/fairdesk/form/block" });
+    res.json({ success: true, redirect: "/sachiko/form/block" });
   } catch (err) {
     console.error(err);
     res.status(400).json({ success: false, message: err.message });
@@ -5278,7 +4547,7 @@ router.post("/form/die", requireAuth, createLimiter, async (req, res) => {
   try {
     await Die.create(req.body);
     req.flash("notification", "Die created successfully!");
-    res.json({ success: true, redirect: "/fairdesk/form/die" });
+    res.json({ success: true, redirect: "/sachiko/form/die" });
   } catch (err) {
     console.error(err);
     res.status(400).json({ success: false, message: err.message });
@@ -5322,7 +4591,7 @@ router.get("/edit/user/:id", async (req, res) => {
 // route for details page.
 router.get("/master/view", async (req, res) => {
   let jsonData = await Username.find()
-    .select("clientName clientType accountHead userName userLocation label ttr tape posRoll tafeta")
+    .select("clientName clientType accountHead userName userLocation label tape posRoll tafeta")
     .sort({ clientName: 1, userName: 1 });
 
   // console.log(jsonData);
@@ -5365,7 +4634,7 @@ router.get("/vendor/view", async (req, res) => {
   } catch (err) {
     console.error("VENDOR VIEW ERROR:", err);
     req.flash("notification", "Failed to load vendor details");
-    res.redirect("/fairdesk/form/vendor");
+    res.redirect("/sachiko/form/vendor");
   }
 });
 
@@ -5375,7 +4644,6 @@ router.get("/vendor/profile/:id", async (req, res) => {
       path: "users",
       populate: [
         { path: "label" },
-        { path: "ttr", populate: { path: "ttrId" } },
         { path: "tape", populate: { path: "tapeId" } },
         { path: "posRoll", populate: { path: "posRollId" } },
         { path: "tafeta", populate: { path: "tafetaId" } },
@@ -5384,7 +4652,7 @@ router.get("/vendor/profile/:id", async (req, res) => {
 
     if (!vendor) {
       req.flash("notification", "Vendor not found");
-      return res.redirect("/fairdesk/vendor/view");
+      return res.redirect("/sachiko/vendor/view");
     }
 
     res.render("users/vendorProfile.ejs", {
@@ -5397,13 +4665,13 @@ router.get("/vendor/profile/:id", async (req, res) => {
   } catch (err) {
     console.error("VENDOR PROFILE ERROR:", err);
     req.flash("notification", "Invalid vendor link");
-    res.redirect("/fairdesk/vendor/view");
+    res.redirect("/sachiko/vendor/view");
   }
 });
 
 // Backward-compatible redirect for the old vendor coordinator URL.
 router.get("/vendor/user/view", async (req, res) => {
-  return res.redirect("/fairdesk/vendor/coordinator/view");
+  return res.redirect("/sachiko/vendor/coordinator/view");
 });
 
 // ----------------------------------Vendor coordinator display----------------------------------
@@ -5433,7 +4701,6 @@ router.get("/vendor/coordinator/view", async (req, res) => {
 
     jsonData.forEach((row) => {
       row.dispatchType = row.SelfDispatch ? "Self Dispatch" : "Transport";
-      row.ttrCount = row.ttr?.length || 0;
       row.tapeCount = row.tape?.length || 0;
       row.posRollCount = row.posRoll?.length || 0;
       row.tafetaCount = row.tafeta?.length || 0;
@@ -5449,7 +4716,7 @@ router.get("/vendor/coordinator/view", async (req, res) => {
   } catch (err) {
     console.error("VENDOR COORDINATOR VIEW ERROR:", err);
     req.flash("notification", "Failed to load vendor coordinator view");
-    res.redirect("/fairdesk/form/vendor");
+    res.redirect("/sachiko/form/vendor");
   }
 });
 
@@ -5458,10 +4725,6 @@ router.get("/vendor/coordinator/details/:userId", async (req, res) => {
   try {
     const vendorUser = await VendorUser.findById(req.params.userId)
       .populate("label")
-      .populate({
-        path: "ttr",
-        populate: { path: "ttrId" },
-      })
       .populate({
         path: "tape",
         populate: { path: "tapeId" },
@@ -5478,14 +4741,13 @@ router.get("/vendor/coordinator/details/:userId", async (req, res) => {
 
     if (!vendorUser) {
       req.flash("notification", "Vendor coordinator not found");
-      return res.redirect("/fairdesk/vendor/coordinator/view");
+      return res.redirect("/sachiko/vendor/coordinator/view");
     }
 
     const vendor = await Vendor.findOne({ vendorId: vendorUser.vendorId }).lean();
 
     const stats = {
       labels: (vendorUser.label || []).length,
-      ttrs: (vendorUser.ttr || []).length,
       tapes: (vendorUser.tape || []).length,
       posRolls: (vendorUser.posRoll || []).length,
       tafetas: (vendorUser.tafeta || []).length,
@@ -5498,7 +4760,6 @@ router.get("/vendor/coordinator/details/:userId", async (req, res) => {
       vendorUser,
       vendor,
       labels: vendorUser.label || [],
-      ttrs: vendorUser.ttr || [],
       tapes: vendorUser.tape || [],
       posRolls: vendorUser.posRoll || [],
       tafetas: vendorUser.tafeta || [],
@@ -5508,7 +4769,7 @@ router.get("/vendor/coordinator/details/:userId", async (req, res) => {
   } catch (err) {
     console.error("VENDOR COORDINATOR DETAILS ERROR:", err);
     req.flash("notification", "Failed to load vendor coordinator details");
-    res.redirect("/fairdesk/vendor/coordinator/view");
+    res.redirect("/sachiko/vendor/coordinator/view");
   }
 });
 
@@ -5519,7 +4780,7 @@ router.post("/vendor/coordinator/details/:userId/delete", requireAuth, deleteLim
 
     if (!vendorUser) {
       req.flash("notification", "Vendor coordinator not found");
-      return res.redirect("/fairdesk/vendor/coordinator/view");
+      return res.redirect("/sachiko/vendor/coordinator/view");
     }
 
     await Vendor.updateOne(
@@ -5530,11 +4791,11 @@ router.post("/vendor/coordinator/details/:userId/delete", requireAuth, deleteLim
     await VendorUser.deleteOne({ _id: vendorUser._id });
 
     req.flash("notification", `Coordinator ${vendorUser.userName} removed successfully`);
-    return res.redirect("/fairdesk/vendor/coordinator/view");
+    return res.redirect("/sachiko/vendor/coordinator/view");
   } catch (err) {
     console.error("VENDOR COORDINATOR DELETE ERROR:", err);
     req.flash("notification", "Failed to remove coordinator");
-    return res.redirect("/fairdesk/vendor/coordinator/details/" + req.params.userId);
+    return res.redirect("/sachiko/vendor/coordinator/details/" + req.params.userId);
   }
 });
 
@@ -5544,7 +4805,7 @@ router.get("/form/edit/vendor-user/:userId", async (req, res) => {
     const user = await VendorUser.findById(req.params.userId).lean();
     if (!user) {
       req.flash("notification", "Vendor coordinator not found");
-      return res.redirect("/fairdesk/vendor/coordinator/view");
+      return res.redirect("/sachiko/vendor/coordinator/view");
     }
 
     const vendor = await Vendor.findOne({ vendorId: user.vendorId }).lean();
@@ -5560,7 +4821,7 @@ router.get("/form/edit/vendor-user/:userId", async (req, res) => {
   } catch (err) {
     console.error("VENDOR COORDINATOR EDIT GET ERROR:", err);
     req.flash("notification", "Failed to load vendor coordinator edit page");
-    res.redirect("/fairdesk/vendor/coordinator/view");
+    res.redirect("/sachiko/vendor/coordinator/view");
   }
 });
 
@@ -5650,7 +4911,7 @@ router.post("/form/edit/vendor-user/:userId", requireAuth, updateLimiter, async 
 
     await VendorUser.findByIdAndUpdate(userId, updatedData, { runValidators: true });
     req.flash("notification", "Vendor coordinator updated successfully!");
-    return res.json({ success: true, redirect: `/fairdesk/vendor/coordinator/details/${userId}` });
+    return res.json({ success: true, redirect: `/sachiko/vendor/coordinator/details/${userId}` });
   } catch (err) {
     console.error("VENDOR COORDINATOR EDIT POST ERROR:", err);
     if (err?.code === 11000) {

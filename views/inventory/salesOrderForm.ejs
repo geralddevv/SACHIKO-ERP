@@ -1,7 +1,7 @@
 <% layout('/layout/boilerplate') -%>
 
 <div class="main-content" style="padding: 10px; display: flex; flex-direction: column; gap: 10px;">
-  <form id="sales-order-form" action="<%= typeof confirmMode !== 'undefined' && confirmMode ? '/fairdesk/sales/order/status' : '/fairdesk/sales/order' %>" method="post" class="needs-validation" autocomplete="off" novalidate>
+  <form id="sales-order-form" action="<%= typeof confirmMode !== 'undefined' && confirmMode ? '/sachiko/sales/order/status' : '/sachiko/tape-sales/order' %>" method="post" class="needs-validation" autocomplete="off" novalidate>
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <input type="hidden" name="orderId" value="<%= typeof orderToEdit !== 'undefined' && orderToEdit ? orderToEdit._id : '' %>" />
     <input type="hidden" name="submissionToken" value="<%= typeof submissionToken !== 'undefined' && submissionToken ? submissionToken : '' %>" />
@@ -75,7 +75,6 @@
         <option value="POS_ROLL">POS Roll</option>
         <option value="TAFETA">Tafeta</option>
         <option value="LABEL">Label</option>
-        <option value="TTR">TTR</option>
       </select>
     </div>
 
@@ -118,12 +117,12 @@
       <h1>Order Info</h1>
     </div>
 
-    <div class="span-five">
+    <div class="span-four">
       <label for="quantity">Order Quantity</label>
       <input type="number" id="quantity" name="quantity" class="form-control" min="1" placeholder="Enter quantity" required />
     </div>
 
-    <div class="span-five">
+    <div class="span-four">
       <label for="po-number">PO Number</label>
       <input type="text" id="po-number" name="poNumber" class="form-control" placeholder="Enter PO number" required />
     </div>    
@@ -138,7 +137,7 @@
       <input type="text" id="order-rate" name="orderRate" class="form-control" placeholder="Enter current rate" inputmode="decimal" />
     </div>
 
-    <div class="span-six">
+    <div class="span-four">
       <label for="estimated-date">Est Delivery Date</label>
       <input type="date" id="estimated-date" name="estimatedDate" class="form-control" required />
     </div>
@@ -454,7 +453,6 @@
     if (model === "TAPE" || bindingModel.includes("TAPEBINDING")) return "TAPE";
     if (model === "POSROLL" || bindingModel.includes("POSROLLBINDING")) return "POS_ROLL";
     if (model === "TAFETA" || bindingModel.includes("TAFETABINDING")) return "TAFETA";
-    if (model === "TTR" || bindingModel.includes("TTRBINDING")) return "TTR";
     if (model === "LABEL" || bindingModel.includes("LABEL")) return "LABEL";
 
     return "";
@@ -620,7 +618,7 @@
     resetUsers();
     
     try {
-      const res = await fetch(`/fairdesk/sales/clients/${itemType}`);
+      const res = await fetch(`/sachiko/sales/clients/${itemType}`);
       const clientNames = await res.json();
       
       const finalNames = [...clientNames];
@@ -658,7 +656,7 @@
     resetItems();
 
     try {
-      const res = await fetch(`/fairdesk/form/labels/${encodeURIComponent(clientName)}`);
+      const res = await fetch(`/sachiko/form/labels/${encodeURIComponent(clientName)}`);
       const clientData = await res.json();
       const users = clientData?.users || [];
 
@@ -714,7 +712,7 @@
     itemChoices.setChoices([{ value: "", label: "Loading...", disabled: true, selected: true }], "value", "label", true);
 
     try {
-      const res = await fetch(`/fairdesk/sales/items/${itemType}/${userId}`);
+      const res = await fetch(`/sachiko/sales/items/${itemType}/${userId}`);
       const items = await res.json();
 
       itemChoices.clearStore();
@@ -780,22 +778,7 @@
       out.push([label, text]);
     };
 
-    if (type === "TTR") {
-      pushIf("Product ID", d.productId);
-      pushIf("Min Stock Qty", d.minQty);
-      pushIf("Client Material Code", d.clientMaterialCode);
-      pushIf("Material Code", d.materialCode);
-      pushIf("Client Type", d.clientType);
-      pushIf("Type", d.ttrType);
-      pushIf("Color", d.color);
-      pushIf("Ink Face", d.inkFace);
-      pushIf("Width", d.width);
-      pushIf("Meters", d.mtrs);
-      pushIf("Core ID", d.coreId);
-      pushIf("Core Length", d.coreLength);
-      pushIf("Notch", d.notch);
-      pushIf("Winding", d.winding);
-    } else if (type === "TAPE") {
+    if (type === "TAPE") {
       pushIf("Product ID", d.productId);
       pushIf("Min Stock Qty", d.minQty);
       pushIf("Client Paper Code", d.clientPaperCode);
@@ -881,7 +864,7 @@
       try {
         const stock = JSON.parse(selectedOption.customProperties.stock);
         
-        const locRes = await fetch("/fairdesk/api/locations");
+        const locRes = await fetch("/sachiko/api/locations");
         const allLocations = await locRes.json();
 
         // Build "ALL" option
@@ -995,7 +978,7 @@
       }
     } else {
       try {
-        const locRes = await fetch("/fairdesk/api/locations");
+        const locRes = await fetch("/sachiko/api/locations");
         const allLocations = await locRes.json();
 
         const locationHtml = (Array.isArray(allLocations) ? allLocations : []).map((locName) => {
@@ -1321,7 +1304,7 @@
     const { selectedRadio, radioLocation, selectedLocation } = getSelectedStockLocation();
     
     // Check Source Location - ALL is not allowed for stock-based items
-    if (itemType === "TAPE" || itemType === "POS_ROLL" || itemType === "TAFETA" || itemType === "TTR") {
+    if (itemType === "TAPE" || itemType === "POS_ROLL" || itemType === "TAFETA") {
       const effectiveLocation = normalizeLocationName(
         selectedLocation || sourceLocationInput.value || currentSourceLocation || locationSelect.value || "",
       );
@@ -1367,7 +1350,7 @@
 
     // For create/update sales order, submit via AJAX so backend JSON errors show as toast
     const actionPath = orderForm.getAttribute("action") || "";
-    if (actionPath === "/fairdesk/sales/order" || actionPath === "/fairdesk/sales/order/status") {
+    if (actionPath === "/sachiko/sales/order" || actionPath === "/sachiko/sales/order/status") {
       try {
         const formData = new FormData(orderForm);
         const payload = new URLSearchParams();
@@ -1402,7 +1385,7 @@
           return true;
         }
 
-        if (actionPath === "/fairdesk/sales/order/status") {
+        if (actionPath === "/sachiko/sales/order/status") {
           showToast("Order dispatched successfully", "success");
         } else {
           showToast("Sales order submitted successfully", "success");
@@ -1544,45 +1527,34 @@
             if (t.tapePaperCode) tapeName = t.tapePaperCode + " " + t.tapeGsm + "gsm";
             else if (t.posPaperCode) tapeName = t.posPaperCode + " " + t.posGsm + "gsm";
             else if (t.tafetaMaterialCode) tapeName = t.tafetaMaterialCode + " " + t.tafetaGsm + "gsm";
-            else if (t.ttrProductId) {
-              const parts = [
-                t.ttrType,
-                t.ttrWidth ? `${t.ttrWidth}` : null,
-                t.ttrMtrs ? `${t.ttrMtrs}m` : null,
-              ].filter(Boolean);
-              tapeName = `${parts[0] || t.ttrProductId || "Item"} ${parts.slice(1).join(" ")}`.trim();
-            }
          }
           // Construct details object for profile display
           const detailsObj = { type: type || "" };
           if (orderToEdit.tapeId) {
              const t = orderToEdit.tapeId;
              detailsObj.type = type;
-             detailsObj.productId = t.tapeProductId || t.posProductId || t.tafetaProductId || t.ttrProductId || "";
+             detailsObj.productId = t.tapeProductId || t.posProductId || t.tafetaProductId || "";
              detailsObj.paperCode = t.tapePaperCode || t.posPaperCode || "";
-             detailsObj.materialCode = t.tafetaMaterialCode || t.ttrMaterialCode || "";
+             detailsObj.materialCode = t.tafetaMaterialCode || "";
              detailsObj.gsm = t.tapeGsm || t.posGsm || t.tafetaGsm || "";
              detailsObj.paperType = t.tapePaperType || t.posPaperType || "";
              detailsObj.materialType = t.tafetaMaterialType || "";
              detailsObj.finish = t.tapeFinish || "";
-             detailsObj.color = t.posColor || t.tafetaColor || t.ttrColor || "";
-             detailsObj.width = t.tapeWidth || t.posWidth || t.tafetaWidth || t.ttrWidth || t.labelWidth || "";
-             detailsObj.mtrs = t.tapeMtrs || t.posMtrs || t.tafetaMtrs || t.ttrMtrs || "";
+             detailsObj.color = t.posColor || t.tafetaColor || "";
+             detailsObj.width = t.tapeWidth || t.posWidth || t.tafetaWidth || t.labelWidth || "";
+             detailsObj.mtrs = t.tapeMtrs || t.posMtrs || t.tafetaMtrs || "";
              detailsObj.coreId = t.tapeCoreId || t.posCoreId || t.tafetaCoreId || t.coreId || "";
              detailsObj.coreLength = t.tafetaCoreLen || t.coreLength || "";
              detailsObj.notch = t.tafetaNotch || t.notch || "";
-             detailsObj.winding = t.ttrWinding || "";
-             detailsObj.inkFace = t.ttrInkFace || "";
              detailsObj.adhesiveGsm = t.tapeAdhesiveGsm || "";
-             detailsObj.minQty = t.tapeMinQty || t.posMinQty || t.tafetaMinQty || t.ttrMinQty || "";
+             detailsObj.minQty = t.tapeMinQty || t.posMinQty || t.tafetaMinQty || "";
              
              // Client specific fields (from populated binding)
              if (orderToEdit.tapeBinding) {
                 const b = orderToEdit.tapeBinding;
                 detailsObj.clientPaperCode = b.tapeClientPaperCode || b.posClientPaperCode || "";
-                detailsObj.clientMaterialCode = b.tafetaClientMaterialCode || b.ttrClientMaterialCode || "";
+                detailsObj.clientMaterialCode = b.tafetaClientMaterialCode || "";
                 detailsObj.clientGsm = b.clientTapeGsm || b.clientPosGsm || b.clientTafetaGsm || "";
-                detailsObj.clientType = b.clientTtrType || "";
                 detailsObj.clientMaterialType = b.tafetaClientMaterialType || "";
              }
           }
@@ -1599,14 +1571,12 @@
                   ? (orderToEdit.tapeBinding.tapeMinQty ??
                     orderToEdit.tapeBinding.posMinQty ??
                     orderToEdit.tapeBinding.tafetaMinQty ??
-                    orderToEdit.tapeBinding.ttrMinQty ??
                     0)
                   : 0,
                 rate: orderToEdit.tapeBinding
                   ? (orderToEdit.tapeBinding.tapeRatePerRoll ??
                     orderToEdit.tapeBinding.posRatePerRoll ??
                     orderToEdit.tapeBinding.tafetaRatePerRoll ??
-                    orderToEdit.tapeBinding.ttrRatePerRoll ??
                     0)
                   : null
              }
@@ -1767,7 +1737,7 @@
     }
 
     try {
-      const res = await fetch(`/fairdesk/sales/order/log/${logId}`, {
+      const res = await fetch(`/sachiko/sales/order/log/${logId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ quantity: qty, invoiceNumber, date })
@@ -1790,7 +1760,7 @@
     const logId = document.getElementById('delete-log-id').value;
 
     try {
-      const res = await fetch(`/fairdesk/sales/order/log/${logId}`, {
+      const res = await fetch(`/sachiko/sales/order/log/${logId}`, {
         method: 'DELETE'
       });
       const data = await res.json();

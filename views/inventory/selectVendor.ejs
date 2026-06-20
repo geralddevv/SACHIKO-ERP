@@ -24,8 +24,8 @@
       userContact: v.userContact,
       userLocation: v.userLocation,
       locationDetails: v.locationDetails || [],
-      vendorCode: binding ? (binding.vendorTapePaperCode || binding.vendorPosPaperCode || binding.vendorTafetaMaterialCode || binding.vendorTtrType || '') : '',
-      minQty: binding ? (binding.tapeMinQty || binding.posMinQty || binding.tafetaMinQty || binding.ttrMinQty || 0) : 0,
+      vendorCode: binding ? (binding.vendorTapePaperCode || binding.vendorPosPaperCode || binding.vendorTafetaMaterialCode || '') : '',
+      minQty: binding ? (binding.tapeMinQty || binding.posMinQty || binding.tafetaMinQty || 0) : 0,
       hasBinding: !!binding
     });
   });
@@ -46,14 +46,12 @@
       <% 
         let bindUrl = '#';
         const itype = String(type || "").toUpperCase();
-        if (itype === 'TTR') {
-          bindUrl = `/fairdesk/form/ttr-vendor-binding?itemId=${item._id}`;
-        } else if (itype === 'TAPE') {
-          bindUrl = `/fairdesk/form/vendor-item-binding/tape?itemId=${item._id}`;
+        if (itype === 'TAPE') {
+          bindUrl = `/sachiko/form/vendor-item-binding/tape?itemId=${item._id}`;
         } else if (itype === 'POSROLL') {
-          bindUrl = `/fairdesk/form/vendor-item-binding/pos?itemId=${item._id}`;
+          bindUrl = `/sachiko/form/vendor-item-binding/pos?itemId=${item._id}`;
         } else if (itype === 'TAFETA') {
-          bindUrl = `/fairdesk/form/vendor-item-binding/tafeta?itemId=${item._id}`;
+          bindUrl = `/sachiko/form/vendor-item-binding/tafeta?itemId=${item._id}`;
         }
       %>
       <a href="<%= bindUrl %>" style="background: #dc2626; color: white; padding: 8px 16px; border-radius: 6px; font-weight: 700; text-decoration: none; font-size: 13px; white-space: nowrap;">
@@ -62,7 +60,7 @@
     </div>
   <% } %>
 
-  <form id="purchase-order-form" action="/fairdesk/inventory/reorder/create-po" method="post" class="needs-validation" autocomplete="off" novalidate>
+  <form id="purchase-order-form" action="/sachiko/inventory/reorder/create-po" method="post" class="needs-validation" autocomplete="off" novalidate>
     <input type="hidden" name="_csrf" value="<%= csrfToken %>" />
     <input type="hidden" name="itemId" value="<%= item._id %>" />
     <input type="hidden" name="itemType" value="<%= type %>" />
@@ -138,17 +136,7 @@
            entries.push([label, text]);
          };
 
-         if (itemType === "TTR") {
-           pushIf("Product ID", d.ttrProductId);
-           pushIf("Type", d.ttrType);
-           pushIf("Ink Face", d.ttrInkFace);
-           pushIf("Width", d.ttrWidth);
-           pushIf("Meters", d.ttrMtrs);
-           pushIf("Core ID", d.ttrCoreId);
-           pushIf("Core Length", d.ttrCoreLength);
-           pushIf("Notch", d.ttrNotch);
-           pushIf("Winding", d.ttrWinding);
-         } else if (itemType === "TAPE") {
+         if (itemType === "TAPE") {
            pushIf("Product ID", d.tapeProductId);
            pushIf("Paper Code", d.tapePaperCode);
            pushIf("GSM", d.tapeGsm);

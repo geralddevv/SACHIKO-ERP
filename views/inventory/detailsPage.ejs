@@ -472,61 +472,6 @@
             <% } %>
         </div>
         
-        <!-- TTRs Section -->
-        <div class="section">
-            <div class="section-header">
-                <h2 class="section-title">TTR</h2>
-                <span class="count-badge"><%= ttrs.length %> TTR(s)</span>
-            </div>
-            
-            <% if (ttrs.length > 0) { %>
-                <div class="products-grid">
-                    <% ttrs.forEach(function(ttr) { %>
-                        <div class="product-card">
-                            <div class="product-header">
-                                <div class="product-id"><%= ttr.productId %></div>
-                                <div class="product-title"><%= ttr.ttrType %> - <%= ttr.ttrColor %></div>
-                            </div>
-                            <div class="product-body">
-                                <div class="product-specs">
-                                    <div class="spec-item">
-                                        <div class="spec-label">Material Code</div>
-                                        <div class="spec-value"><%= ttr.ttrMaterialCode %></div>
-                                    </div>
-                                    <div class="spec-item">
-                                        <div class="spec-label">Width</div>
-                                        <div class="spec-value"><%= ttr.ttrWidth %>mm</div>
-                                    </div>
-                                    <div class="spec-item">
-                                        <div class="spec-label">Meters</div>
-                                        <div class="spec-value"><%= ttr.ttrMtrs %></div>
-                                    </div>
-                                    <div class="spec-item">
-                                        <div class="spec-label">Ink Face</div>
-                                        <div class="spec-value"><%= ttr.ttrInkFace %></div>
-                                    </div>
-                                    <div class="spec-item">
-                                        <div class="spec-label">Winding</div>
-                                        <div class="spec-value"><%= ttr.ttrWinding %></div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="product-footer">
-                                <div class="price">Sale Cost: ₹<%= ttr.ttrSaleCost %></div>
-                                <button class="action-btn">View Details</button>
-                            </div>
-                        </div>
-                    <% }); %>
-                </div>
-            <% } else { %>
-                <div class="no-data">
-                    <i class="fas fa-barcode"></i>
-                    <h3>No TTRs Found</h3>
-                    <p>This client doesn't have any TTRs associated with their account.</p>
-                </div>
-            <% } %>
-        </div>
-        
         <!-- Tapes Section -->
         <div class="section">
             <div class="section-header">

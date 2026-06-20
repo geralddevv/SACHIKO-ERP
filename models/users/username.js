@@ -45,12 +45,6 @@ const userSchema = new mongoose.Schema({
       ref: "Label",
     },
   ],
-  ttr: [
-    {
-      type: Schema.Types.ObjectId,
-      ref: "TtrBinding",
-    },
-  ],
   tape: [
     {
       type: Schema.Types.ObjectId,

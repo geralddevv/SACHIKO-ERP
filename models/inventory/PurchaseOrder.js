@@ -5,7 +5,7 @@ const purchaseOrderSchema = new mongoose.Schema(
     /* ================= REFERENCES ================= */
     onBindingModel: {
       type: String,
-      enum: ["VendorTapeBinding", "VendorPosRollBinding", "VendorTafetaBinding", "VendorTtrBinding"],
+      enum: ["VendorTapeBinding", "VendorPosRollBinding", "VendorTafetaBinding"],
     },
     vendorBinding: {
       type: mongoose.Schema.Types.ObjectId,
@@ -22,7 +22,7 @@ const purchaseOrderSchema = new mongoose.Schema(
     onModel: {
       type: String,
       required: true,
-      enum: ["Tape", "PosRoll", "Tafeta", "Ttr"],
+      enum: ["Tape", "PosRoll", "Tafeta"],
     },
     itemId: {
       type: mongoose.Schema.Types.ObjectId,

@@ -328,7 +328,7 @@
           </span>
         </div>
       </div>
-      <a href="/fairdesk/vendor/edit/<%= vendor._id %>" class="edit-btn">
+      <a href="/sachiko/vendor/edit/<%= vendor._id %>" class="edit-btn">
         <i class="fa-solid fa-pen"></i> Edit Details
       </a>
     </div>
@@ -369,7 +369,7 @@
   <div class="section-card">
     <div class="section-header">
       <h2>Associated Coordinators / Locations</h2>
-      <button class="header-action-btn" onclick="window.location.href='/fairdesk/form/vendor?tab=user&vendorName=<%= encodeURIComponent(vendor.vendorName) %>'" style="background: var(--primary); color: white; border: none; padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;">
+      <button class="header-action-btn" onclick="window.location.href='/sachiko/form/vendor?tab=user&vendorName=<%= encodeURIComponent(vendor.vendorName) %>'" style="background: var(--primary); color: white; border: none; padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 13px;">
         <i class="fa-solid fa-plus"></i> Add Coordinator
       </button>
     </div>
@@ -391,7 +391,7 @@
             <% vendor.users.forEach(user => { %>
               <tr class="user-row expanded" onclick="toggleUserExpand(this)">
                 <td><i class="fa-solid fa-chevron-right toggle-icon"></i></td>
-                <td><a href="/fairdesk/vendor/coordinator/details/<%= user._id %>" class="user-link" onclick="event.stopPropagation()"><%= user.userName %></a></td>
+                <td><a href="/sachiko/vendor/coordinator/details/<%= user._id %>" class="user-link" onclick="event.stopPropagation()"><%= user.userName %></a></td>
                 <td><%= user.userLocation %></td>
                 <td><%= user.userDepartment %></td>
                 <td><%= user.userContact %></td>
@@ -451,51 +451,6 @@
                         </div>
                       <% } %>
 
-                      <!-- TTR -->
-                      <% if ((user.ttr || []).length > 0) { %>
-                        <div class="item-category-group">
-                          <div class="item-category-header">
-                            <span class="item-type-label">TTR</span>
-                            <span class="item-count-badge"><%= user.ttr.length %></span>
-                          </div>
-                          <table class="inner-spec-table">
-                            <thead>
-                              <tr>
-                                <th style="width: 12%;">Item</th>
-                                <th style="width: 12%;">Type</th>
-                                <th>Color</th>
-                                <th>Width</th>
-                                <th>Mtrs</th>
-                                <th>InkFace</th>
-                                <th>Core</th>
-                                <th>Min</th>
-                                <th>Odr</th>
-                                <th>Freq</th>
-                                <th>Credit</th>
-                                <th>Rate</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              <% user.ttr.forEach(i => { %>
-                                <tr>
-                                  <td class="item-name-cell"><%= i.vendorTtrMaterialCode %></td>
-                                  <td><%= i.vendorTtrType || (i.ttrId ? i.ttrId.ttrType : '-') %></td>
-                                  <td><%= i.vendorTtrColor || (i.ttrId ? i.ttrId.ttrColor : '-') %></td>
-                                  <td><%= i.ttrId ? i.ttrId.ttrWidth : '-' %></td>
-                                  <td><%= i.ttrMtrsDel %></td>
-                                  <td><%= i.ttrId ? i.ttrId.ttrInkFace : '-' %></td>
-                                  <td><%= i.ttrId ? i.ttrId.ttrCoreId : '-' %></td>
-                                  <td><%= i.ttrMinQty %></td>
-                                  <td><%= i.ttrOdrQty || '-' %></td>
-                                  <td><%= i.ttrOdrFreq || '-' %></td>
-                                  <td><%= i.ttrCreditTerm || '-' %></td>
-                                  <td style="font-weight:600;">₹<%= i.ttrRatePerRoll %></td>
-                                </tr>
-                              <% }) %>
-                            </tbody>
-                          </table>
-                        </div>
-                      <% } %>
 
                       <!-- Tape -->
                       <% if ((user.tape || []).length > 0) { %>
@@ -637,7 +592,6 @@
 
                       <% if (
                         (user.label || []).length === 0 &&
-                        (user.ttr || []).length === 0 &&
                         (user.tape || []).length === 0 &&
                         (user.posRoll || []).length === 0 &&
                         (user.tafeta || []).length === 0

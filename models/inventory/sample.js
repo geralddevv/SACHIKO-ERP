@@ -4,7 +4,7 @@ const sampleSchema = new mongoose.Schema(
   {
     /* ================= IDENTIFICATION ================= */
     sampleCode: {
-      type: String, // FS | TTR | VSMP | 000001
+      type: String, // FS | TAPE | VSMP | 000001
       required: true,
       unique: true,
       trim: true,

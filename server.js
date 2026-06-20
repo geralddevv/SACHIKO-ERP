@@ -239,6 +239,15 @@ app.use((req, res, next) => {
   next();
 });
 
+/* Login portal info: this app authenticates Sachiko only; the Fairtech
+   option on the shared login switches the browser to the Fairtech app. */
+app.use((req, res, next) => {
+  res.locals.selfBrand = "sachiko";
+  res.locals.fairtechLoginUrl = `${process.env.FAIRTECH_URL || "http://localhost:3000"}/fairtech/login`;
+  res.locals.sachikoLoginUrl = "/sachiko/login";
+  next();
+});
+
 
 /* Authenticated Image Serving */
 app.get("/debug-image/:folder/:filename", async (req, res) => {
@@ -440,7 +449,7 @@ app.get("/", (req, res) => {
   if (req.session?.authUser) {
     return res.redirect(redirectByRole(req.session.authUser.role));
   }
-  res.render("auth/login", { title: "Login", CSS: "login.css", csrfToken: req.csrfToken() });
+  res.render("auth/login", { title: "Login", CSS: "login.css", csrfToken: req.csrfToken(), brand: "fairdesk" });
 });
 
 app.get("/login", (req, res) => {
@@ -448,20 +457,21 @@ app.get("/login", (req, res) => {
     return res.redirect(redirectByRole(req.session.authUser.role));
   }
   // Ensure session is initialized by storing something minimal if needed
-  // req.session.init = true; 
-  res.render("auth/login", { title: "Login", CSS: "login.css" });
+  // req.session.init = true;
+  res.render("auth/login", { title: "Login", CSS: "login.css", brand: "fairdesk" });
 });
 
 app.get("/sachiko/login", (req, res) => {
   if (req.session?.authUser) {
     return res.redirect(redirectByRole(req.session.authUser.role));
   }
-  res.render("auth/login", { title: "Login", CSS: "login.css", csrfToken: req.csrfToken() });
+  res.render("auth/login", { title: "Login", CSS: "login.css", csrfToken: req.csrfToken(), brand: "sachiko" });
 });
 
 const handleLogin = async (req, res) => {
   const { profileCode, username, password } = req.body;
   const loginCode = String(profileCode || username || "").trim();
+  const brand = req.body.brand === "sachiko" ? "sachiko" : "fairdesk";
   const adminUser = process.env.ADMIN_USER;
   const adminPass = process.env.ADMIN_PASS;
   const hrUser = process.env.HR_USER;
@@ -491,6 +501,7 @@ const handleLogin = async (req, res) => {
       CSS: "login.css",
       profileCode: loginCode,
       password,
+      brand,
       error: ["Please enter your credentials."],
     });
   }
@@ -519,6 +530,7 @@ const handleLogin = async (req, res) => {
           title: "Login",
           CSS: "login.css",
           profileCode: loginCode,
+          brand,
           error: ["Unable to start session. Please try again."],
         });
       }
@@ -549,6 +561,7 @@ const handleLogin = async (req, res) => {
           title: "Login",
           CSS: "login.css",
           profileCode: loginCode,
+          brand,
           error: ["Your account is disabled. Please contact admin."],
         });
       }
@@ -571,6 +584,7 @@ const handleLogin = async (req, res) => {
     CSS: "login.css",
     profileCode: loginCode,
     password,
+    brand,
     error: ["Invalid username or password."],
   });
 };
